@@ -113,9 +113,18 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen>
 
   void _initCamera() {
     _cameraController = MobileScannerController(
-      detectionSpeed: DetectionSpeed.normal,
+      detectionSpeed: DetectionSpeed.unrestricted,
       facing: CameraFacing.back,
       torchEnabled: false,
+      formats: [
+        BarcodeFormat.ean13,
+        BarcodeFormat.ean8,
+        BarcodeFormat.upca,
+        BarcodeFormat.upce,
+        BarcodeFormat.code128,
+        BarcodeFormat.code39,
+        BarcodeFormat.qrCode,
+      ],
     );
     setState(() => _permState = _CameraPermState.granted);
   }
@@ -410,19 +419,9 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen>
         children: [
           // ── Camera View ──
           if (_cameraController != null)
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final w = constraints.maxWidth;
-                final h = constraints.maxHeight;
-                final scanAreaSize = w * 0.7;
-                final left = (w - scanAreaSize) / 2;
-                final top = (h - scanAreaSize) / 2 - 40;
-                return MobileScanner(
-                  controller: _cameraController!,
-                  scanWindow: Rect.fromLTWH(left, top, scanAreaSize, scanAreaSize),
-                  onDetect: _onBarcodeDetected,
-                );
-              },
+            MobileScanner(
+              controller: _cameraController!,
+              onDetect: _onBarcodeDetected,
             ),
 
           // ── Scan Overlay ──
