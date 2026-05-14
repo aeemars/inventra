@@ -38,6 +38,7 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen>
   bool _isProcessing = false;
   bool _torchEnabled = false;
   String? _lastScannedCode;
+  DateTime? _lastScanTime;
   ScanIntent? _selectedIntent;
 
   // Camera permission state
@@ -138,10 +139,19 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen>
         (barcodes.first.rawValue ?? barcodes.first.displayValue)?.trim();
     if (code == null || code.isEmpty) return;
 
-    // Debounce repeated scans of the same code
+    // Cooldown: ignore all detections for 400ms after a successful scan
+    final now = DateTime.now();
+    if (_lastScanTime != null &&
+        now.difference(_lastScanTime!).inMilliseconds < 400) {
+      return;
+    }
+
+    // Dedup: don't re-process the same code until reset
     if (code == _lastScannedCode) return;
 
-    _debouncer.run(() => _processBarcode(code));
+    // Process immediately — no debounce delay
+    _lastScanTime = now;
+    _processBarcode(code);
   }
 
   Future<void> _processBarcode(String barcode) async {
@@ -165,7 +175,10 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen>
             scanIntent: 'addProduct',
           );
 
-      if (!mounted) return;
+      if (!mounted) {
+        setState(() => _isProcessing = false);
+        return;
+      }
       ref
           .read(scannerRouteAccessProvider.notifier)
           .grant(ScannerProtectedRoute.addProduct);
@@ -186,7 +199,10 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen>
           .read(productRepositoryProvider)
           .findByBarcode(shopId, barcode);
 
-      if (!mounted) return;
+      if (!mounted) {
+        _isProcessing = false;
+        return;
+      }
 
       // Save scan history
       ref.read(scannerControllerProvider.notifier).saveScanEntry(
@@ -283,7 +299,12 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen>
           ],
         ),
       ),
-    );
+    ).whenComplete(() {
+      // Reset when sheet is dismissed by any means (swipe, back, button)
+      if (mounted) {
+        setState(() => _lastScannedCode = null);
+      }
+    });
   }
 
   // ── Quick Sell Sheet ──
@@ -313,7 +334,11 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen>
           }
         },
       ),
-    );
+    ).whenComplete(() {
+      if (mounted) {
+        setState(() => _lastScannedCode = null);
+      }
+    });
   }
 
   // ── Manual Entry Dialog ──
