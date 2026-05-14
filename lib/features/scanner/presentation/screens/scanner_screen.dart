@@ -113,11 +113,25 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen>
 
   void _initCamera() {
     _cameraController = MobileScannerController(
-      detectionSpeed: DetectionSpeed.unrestricted,
+      detectionSpeed: DetectionSpeed.normal,
       facing: CameraFacing.back,
       torchEnabled: false,
     );
     setState(() => _permState = _CameraPermState.granted);
+  }
+
+  /// Compute scan window rect using the same formula as _ScanOverlayPainter
+  Rect _computeScanWindow(Size size) {
+    final scanAreaSize = size.width * 0.7;
+    final left = (size.width - scanAreaSize) / 2;
+    final top = (size.height - scanAreaSize) / 2 - 40;
+    // Normalize to 0..1 range as required by MobileScanner
+    return Rect.fromLTWH(
+      left / size.width,
+      top / size.height,
+      scanAreaSize / size.width,
+      scanAreaSize / size.height,
+    );
   }
 
   void _onBarcodeDetected(BarcodeCapture capture) {
@@ -410,9 +424,16 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen>
         children: [
           // ── Camera View ──
           if (_cameraController != null)
-            MobileScanner(
-              controller: _cameraController!,
-              onDetect: _onBarcodeDetected,
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final size = Size(constraints.maxWidth, constraints.maxHeight);
+                final scanWindow = _computeScanWindow(size);
+                return MobileScanner(
+                  controller: _cameraController!,
+                  onDetect: _onBarcodeDetected,
+                  scanWindow: scanWindow,
+                );
+              },
             ),
 
           // ── Scan Overlay ──
