@@ -845,7 +845,7 @@ class _ScanOverlayPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final scanAreaSize = size.width * 0.7;
+    final scanAreaSize = size.width * 0.85;
     final left = (size.width - scanAreaSize) / 2;
     final top = (size.height - scanAreaSize) / 2 - 40;
     final scanRect = Rect.fromLTWH(left, top, scanAreaSize, scanAreaSize);
