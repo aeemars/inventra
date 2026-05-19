@@ -11,11 +11,7 @@ import '../../../../core/widgets/app_card.dart';
 import '../../../auth/presentation/controllers/auth_controller.dart';
 import '../../../inventory/presentation/controllers/inventory_controller.dart';
 
-/// Dashboard screen matching Figma "My Shop":
-/// - Header with "My Shop" + profile avatar
-/// - "Current Stock Levels" card with green "All Synced" badge
-/// - Horizontal bar chart
-/// - Two stat cards (total products, low stock)
+
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
 
