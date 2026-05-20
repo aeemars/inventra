@@ -11,7 +11,6 @@ import '../../../../core/widgets/app_card.dart';
 import '../../../auth/presentation/controllers/auth_controller.dart';
 import '../../../inventory/presentation/controllers/inventory_controller.dart';
 
-
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
 
@@ -255,10 +254,10 @@ class DashboardScreen extends ConsumerWidget {
                     onTap: () => context.go('/inventory'),
                   ),
                   _QuickAction(
-                    icon: Icons.qr_code_scanner_rounded,
-                    label: 'Scan',
-                    color: AppColors.scannerBlue,
-                    onTap: () => context.go('/scanner'),
+                    icon: Icons.trending_up_rounded,
+                    label: 'In-Demand',
+                    color: AppColors.coral,
+                    onTap: () => context.push('/in-demand'),
                   ),
                   _QuickAction(
                     icon: Icons.receipt_long_rounded,
