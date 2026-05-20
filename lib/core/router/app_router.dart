@@ -16,6 +16,7 @@ import '../../features/scanner/presentation/screens/scan_history_screen.dart';
 import '../../features/analytics/presentation/screens/reporting_screen.dart';
 import '../../features/transactions/presentation/screens/transaction_logs_screen.dart';
 import '../../features/in_demand/presentation/screens/in_demand_screen.dart';
+import '../../features/inventory/presentation/screens/low_stock_screen.dart';
 import '../constants/app_colors.dart';
 import 'scanner_route_access.dart';
 
@@ -75,6 +76,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
           path: '/transaction-logs',
           builder: (_, __) => const TransactionLogsScreen()),
+      GoRoute(path: '/low-stock', builder: (_, __) => const LowStockScreen()),
       GoRoute(path: '/in-demand', builder: (_, __) => const InDemandScreen()),
       GoRoute(path: '/profile', builder: (_, __) => const ProfileScreen()),
     ],

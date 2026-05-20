@@ -191,6 +191,7 @@ class DashboardScreen extends ConsumerWidget {
                       label: 'Total Products',
                       icon: Icons.inventory_2_outlined,
                       color: AppColors.primary,
+                      onTap: () => context.go('/inventory'),
                     ),
                   ),
                   const SizedBox(width: AppSizes.md),
@@ -200,6 +201,7 @@ class DashboardScreen extends ConsumerWidget {
                       label: 'Low Stock',
                       icon: Icons.warning_amber_rounded,
                       color: AppColors.warning,
+                      onTap: () => context.push('/low-stock'),
                     ),
                   ),
                 ],
@@ -353,41 +355,46 @@ class _StatCard extends StatelessWidget {
   final String label;
   final IconData icon;
   final Color color;
+  final VoidCallback? onTap;
 
   const _StatCard({
     required this.value,
     required this.label,
     required this.icon,
     required this.color,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return AppCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(10),
+    return GestureDetector(
+      onTap: onTap,
+      child: AppCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(icon, color: color, size: 20),
             ),
-            child: Icon(icon, color: color, size: 20),
-          ),
-          const SizedBox(height: AppSizes.md),
-          Text(
-            value,
-            style: AppTypography.statMedium,
-          ),
-          const SizedBox(height: 2),
-          Text(
-            label,
-            style: AppTypography.bodySmall
-                .copyWith(color: AppColors.textSecondary),
-          ),
-        ],
+            const SizedBox(height: AppSizes.md),
+            Text(
+              value,
+              style: AppTypography.statMedium,
+            ),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              style: AppTypography.bodySmall
+                  .copyWith(color: AppColors.textSecondary),
+            ),
+          ],
+        ),
       ),
     );
   }
