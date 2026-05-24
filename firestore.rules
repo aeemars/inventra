@@ -48,9 +48,9 @@ service cloud.firestore {
       allow read: if isAuthenticated() && isOwner(userId);
       allow create: if isAuthenticated() && isOwner(userId)
                     && request.resource.data.keys().hasAll(['email', 'displayName', 'role', 'createdAt', 'updatedAt'])
-                    && request.resource.data.role in ['admin', 'manager', 'warehouse', 'sales'];
+                    && request.resource.data.role in ['admin', 'sales'];
       allow update: if isAuthenticated() && isOwner(userId)
-                    && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['uid', 'createdAt']);
+                    && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['uid', 'createdAt', 'role']);
       allow delete: if false; // Users cannot be deleted from client
     }
 
@@ -92,9 +92,8 @@ service cloud.firestore {
                       && hasRequiredTransactionFields()
                       && request.resource.data.type in ['sale', 'refund']
                       && request.resource.data.status in ['completed', 'pending', 'cancelled'];
-        allow update: if isShopAdminOrManager(shopId)
-                      && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['createdBy', 'createdAt', 'items']);
-        allow delete: if false; // Transactions are immutable
+        allow update: if false; // Transactions are immutable audit trails
+        allow delete: if false;
       }
 
       // ── Stock Movements ──
