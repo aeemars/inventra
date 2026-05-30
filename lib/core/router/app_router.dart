@@ -18,6 +18,7 @@ import '../../features/transactions/presentation/screens/transaction_logs_screen
 import '../../features/in_demand/presentation/screens/in_demand_screen.dart';
 import '../../features/inventory/presentation/screens/low_stock_screen.dart';
 import '../constants/app_colors.dart';
+import '../extensions/theme_ext.dart';
 import 'scanner_route_access.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
@@ -104,12 +105,17 @@ class _MainShell extends StatelessWidget {
     return Scaffold(
       body: child,
       bottomNavigationBar: Container(
-        decoration: const BoxDecoration(
-          color: AppColors.white,
+        decoration: BoxDecoration(
+          color: context.appSurface,
           boxShadow: [
             BoxShadow(
-                color: AppColors.shadow, blurRadius: 8, offset: Offset(0, -2))
+                color: context.isDark ? Colors.black.withValues(alpha: 0.2) : AppColors.shadow,
+                blurRadius: 8,
+                offset: const Offset(0, -2))
           ],
+          border: Border(
+            top: BorderSide(color: context.appCardBorder, width: 0.5),
+          ),
         ),
         child: SafeArea(
           child: SizedBox(
@@ -185,6 +191,9 @@ class _NavItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final activeColor = context.isDark ? AppColors.primaryLight : AppColors.primary;
+    final inactiveColor = context.appTextTertiary;
+
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
@@ -195,7 +204,7 @@ class _NavItem extends StatelessWidget {
           children: [
             Icon(isActive ? activeIcon : icon,
                 size: 24,
-                color: isActive ? AppColors.primary : AppColors.textTertiary),
+                color: isActive ? activeColor : inactiveColor),
             const SizedBox(height: 4),
             Text(label,
                 maxLines: 1,
@@ -205,7 +214,7 @@ class _NavItem extends StatelessWidget {
                     fontSize: 10,
                     fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
                     color:
-                        isActive ? AppColors.primary : AppColors.textTertiary)),
+                        isActive ? activeColor : inactiveColor)),
           ],
         ),
       ),
