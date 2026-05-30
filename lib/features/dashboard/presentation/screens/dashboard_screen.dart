@@ -10,6 +10,7 @@ import '../../../../core/utils/formatters.dart';
 import '../../../../core/widgets/app_card.dart';
 import '../../../auth/presentation/controllers/auth_controller.dart';
 import '../../../inventory/presentation/controllers/inventory_controller.dart';
+import '../../../transactions/presentation/controllers/transaction_logs_controller.dart';
 
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
@@ -48,7 +49,8 @@ class DashboardScreen extends ConsumerWidget {
     final totalProducts = ref.watch(totalProductsProvider);
     final lowStockCount = ref.watch(lowStockCountProvider);
     final inventoryValue = ref.watch(inventoryValueProvider);
-    final productsAsync = ref.watch(productsProvider);
+    final intakeToday = ref.watch(todayIntakeCountProvider);
+    final salesToday = ref.watch(todaySalesCountProvider);
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -89,96 +91,33 @@ class DashboardScreen extends ConsumerWidget {
               ),
               const SizedBox(height: AppSizes.xxl),
 
-              // ── Current Stock Levels Card ──
-              AppCard(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text('Current Stock Levels',
-                            style: AppTypography.labelLarge),
-                        // Green "All Synced" badge
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: AppColors.success.withValues(alpha: 0.15),
-                            borderRadius:
-                                BorderRadius.circular(AppSizes.radiusFull),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Container(
-                                width: 6,
-                                height: 6,
-                                decoration: const BoxDecoration(
-                                  color: AppColors.success,
-                                  shape: BoxShape.circle,
-                                ),
-                              ),
-                              const SizedBox(width: 6),
-                              Text(
-                                'All Synced',
-                                style: AppTypography.labelSmall
-                                    .copyWith(color: AppColors.success),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
+              // ── Intake & Sales Row ──
+              Row(
+                children: [
+                  Expanded(
+                    child: _DashboardSummaryCard(
+                      label: 'INTAKE',
+                      value: intakeToday,
+                      subtitle: 'Items added today',
+                      color: const Color(0xFF2E7D32),
+                      bgColor: const Color(0xFFE8F5E9),
+                      icon: Icons.arrow_downward_rounded,
+                      onTap: () => context.push('/transaction-logs'),
                     ),
-                    const SizedBox(height: AppSizes.xl),
-
-                    // ── Bar Chart (simplified) ──
-                    productsAsync.when(
-                      data: (products) {
-                        // Group by category and show stock bars
-                        final categoryStocks = <String, int>{};
-                        for (final p in products) {
-                          final cat = p.categoryName ?? 'Uncategorized';
-                          categoryStocks[cat] =
-                              (categoryStocks[cat] ?? 0) + p.quantity;
-                        }
-
-                        if (categoryStocks.isEmpty) {
-                          return const SizedBox(
-                            height: 100,
-                            child: Center(
-                              child: Text('No products yet',
-                                  style:
-                                      TextStyle(color: AppColors.textTertiary)),
-                            ),
-                          );
-                        }
-
-                        final maxVal = categoryStocks.values
-                            .reduce((a, b) => a > b ? a : b);
-
-                        return Column(
-                          children: categoryStocks.entries
-                              .take(5)
-                              .map((entry) => _StockBar(
-                                    label: entry.key,
-                                    value: entry.value,
-                                    maxValue: maxVal,
-                                  ))
-                              .toList(),
-                        );
-                      },
-                      loading: () => const SizedBox(
-                        height: 100,
-                        child: Center(child: CircularProgressIndicator()),
-                      ),
-                      error: (_, __) => const SizedBox(
-                        height: 100,
-                        child: Center(child: Text('Error loading data')),
-                      ),
+                  ),
+                  const SizedBox(width: AppSizes.md),
+                  Expanded(
+                    child: _DashboardSummaryCard(
+                      label: 'SALES',
+                      value: salesToday,
+                      subtitle: 'Items sold today',
+                      color: const Color(0xFFE85D3A),
+                      bgColor: const Color(0xFFFFF3E0),
+                      icon: Icons.arrow_upward_rounded,
+                      onTap: () => context.push('/transaction-logs'),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
               const SizedBox(height: AppSizes.lg),
 
@@ -284,67 +223,75 @@ class DashboardScreen extends ConsumerWidget {
   }
 }
 
-class _StockBar extends StatelessWidget {
+class _DashboardSummaryCard extends StatelessWidget {
   final String label;
   final int value;
-  final int maxValue;
+  final String subtitle;
+  final Color color;
+  final Color bgColor;
+  final IconData icon;
+  final VoidCallback onTap;
 
-  const _StockBar({
+  const _DashboardSummaryCard({
     required this.label,
     required this.value,
-    required this.maxValue,
+    required this.subtitle,
+    required this.color,
+    required this.bgColor,
+    required this.icon,
+    required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    final fraction = maxValue > 0 ? value / maxValue : 0.0;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 80,
-            child: Text(
-              label,
-              style: AppTypography.bodySmall
-                  .copyWith(color: AppColors.textSecondary),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Stack(
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(AppSizes.radiusLg),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
               children: [
-                Container(
-                  height: 20,
-                  decoration: BoxDecoration(
-                    color: AppColors.inputFill,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                ),
-                FractionallySizedBox(
-                  widthFactor: fraction.clamp(0.0, 1.0),
-                  child: Container(
-                    height: 20,
-                    decoration: BoxDecoration(
-                      color: AppColors.primary,
-                      borderRadius: BorderRadius.circular(4),
-                    ),
+                Icon(icon, size: 14, color: color),
+                const SizedBox(width: 6),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: color,
+                    letterSpacing: 1.0,
                   ),
                 ),
               ],
             ),
-          ),
-          const SizedBox(width: 8),
-          SizedBox(
-            width: 36,
-            child: Text(
+            const SizedBox(height: 8),
+            Text(
               '$value',
-              style: AppTypography.labelMedium,
-              textAlign: TextAlign.right,
+              style: const TextStyle(
+                fontSize: 36,
+                fontWeight: FontWeight.w800,
+                color: AppColors.textPrimary,
+                height: 1.1,
+              ),
             ),
-          ),
-        ],
+            const SizedBox(height: 4),
+            Text(
+              subtitle,
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w400,
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
