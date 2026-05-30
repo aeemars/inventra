@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../constants/app_colors.dart';
 import '../constants/app_sizes.dart';
+import '../extensions/theme_ext.dart';
 
 /// Styled text field matching Figma input design
 class AppTextField extends StatelessWidget {
@@ -50,10 +50,10 @@ class AppTextField extends StatelessWidget {
         if (label != null) ...[
           Text(
             label!,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w500,
-              color: AppColors.textSecondary,
+              color: context.appTextSecondary,
             ),
           ),
           const SizedBox(height: AppSizes.sm),
@@ -71,16 +71,16 @@ class AppTextField extends StatelessWidget {
           focusNode: focusNode,
           textInputAction: textInputAction,
           enabled: enabled,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 14,
-            color: AppColors.textPrimary,
+            color: context.appTextPrimary,
           ),
           decoration: InputDecoration(
             hintText: hint,
             prefixIcon: prefixIcon,
             suffixIcon: suffixIcon,
             filled: true,
-            fillColor: enabled ? AppColors.inputFill : AppColors.inputFill.withValues(alpha: 0.5),
+            fillColor: enabled ? context.appInputFill : context.appInputFill.withValues(alpha: 0.5),
           ),
         ),
       ],

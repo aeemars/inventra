@@ -5,6 +5,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_sizes.dart';
+import '../../../../core/extensions/theme_ext.dart';
 import '../../../auth/presentation/controllers/auth_controller.dart';
 import '../../../inventory/domain/entities/product.dart';
 import '../../../inventory/presentation/controllers/inventory_controller.dart';
@@ -226,16 +227,16 @@ class _EditProductsScreenState extends ConsumerState<EditProductsScreen> {
     final productsAsync = ref.watch(productsProvider);
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FB),
+      backgroundColor: context.appBackground,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         centerTitle: false,
-        title: const Text(
+        title: Text(
           'Edit Products',
           style: TextStyle(
             fontWeight: FontWeight.w700,
-            color: Colors.black87,
+            color: context.appTextPrimary,
           ),
         ),
       ),
@@ -264,14 +265,14 @@ class _EditProductsScreenState extends ConsumerState<EditProductsScreen> {
                         icon: const Icon(Icons.close_rounded),
                       ),
                 filled: true,
-                fillColor: Colors.white,
+                fillColor: context.appSurfaceRaised,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: Colors.grey.shade200),
+                  borderSide: BorderSide(color: context.appCardBorder),
                 ),
                 enabledBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: Colors.grey.shade200),
+                  borderSide: BorderSide(color: context.appCardBorder),
                 ),
               ),
             ),
@@ -300,10 +301,10 @@ class _EditProductsScreenState extends ConsumerState<EditProductsScreen> {
                       products.where((p) => p.isActive).toList());
 
                   if (activeProducts.isEmpty) {
-                    return const Center(
+                    return Center(
                       child: Text(
                         'No products available for editing.',
-                        style: TextStyle(color: Colors.black54),
+                        style: TextStyle(color: context.appTextSecondary),
                       ),
                     );
                   }

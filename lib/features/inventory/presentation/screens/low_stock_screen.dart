@@ -7,6 +7,7 @@ import '../../../../core/constants/app_typography.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../core/widgets/app_card.dart';
 import '../../../../core/widgets/empty_state.dart';
+import '../../../../core/extensions/theme_ext.dart';
 import '../controllers/inventory_controller.dart';
 
 class LowStockScreen extends ConsumerWidget {
@@ -23,7 +24,7 @@ class LowStockScreen extends ConsumerWidget {
       });
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: context.appBackground,
       appBar: AppBar(
         title: const Text('Low Stock Items'),
       ),
@@ -57,7 +58,7 @@ class LowStockScreen extends ConsumerWidget {
                     child: Text(
                       '${Formatters.number(sortedProducts.length)} items need attention',
                       style: AppTypography.bodyMedium
-                          .copyWith(color: AppColors.textPrimary),
+                          .copyWith(color: context.appTextPrimary),
                     ),
                   ),
                 ],
@@ -114,13 +115,14 @@ class LowStockScreen extends ConsumerWidget {
                                     product.name,
                                     style: AppTypography.bodyMedium.copyWith(
                                       fontWeight: FontWeight.w600,
+                                      color: context.appTextPrimary,
                                     ),
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
                                     product.categoryName ?? 'Uncategorized',
                                     style: AppTypography.bodySmall.copyWith(
-                                      color: AppColors.textSecondary,
+                                      color: context.appTextSecondary,
                                     ),
                                   ),
                                 ],
@@ -149,7 +151,7 @@ class LowStockScreen extends ConsumerWidget {
                                 Text(
                                   'min ${product.reorderLevel}',
                                   style: AppTypography.labelSmall
-                                      .copyWith(color: AppColors.textTertiary),
+                                      .copyWith(color: context.appTextTertiary),
                                 ),
                               ],
                             ),

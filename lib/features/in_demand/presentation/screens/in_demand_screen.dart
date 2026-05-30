@@ -4,8 +4,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_sizes.dart';
 import '../../../../core/constants/app_typography.dart';
+import '../../../../core/extensions/theme_ext.dart';
 import '../../../../core/widgets/app_button.dart';
 import '../../../../core/widgets/app_card.dart';
+import '../../../../core/widgets/app_text_field.dart';
 import '../../../../shared/providers/firebase_providers.dart';
 import '../../../auth/presentation/controllers/auth_controller.dart';
 import '../../../inventory/presentation/controllers/inventory_controller.dart';
@@ -100,7 +102,7 @@ class _InDemandScreenState extends ConsumerState<InDemandScreen> {
         : firestore.collection('shops').doc(shopId).collection('in_demand');
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: context.appBackground,
       appBar: AppBar(
         title: const Text('In-Demand Items'),
       ),
@@ -109,7 +111,7 @@ class _InDemandScreenState extends ConsumerState<InDemandScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Add Item', style: AppTypography.h4),
+            Text('Add Item', style: AppTypography.h4.copyWith(color: context.appTextPrimary)),
             const SizedBox(height: AppSizes.md),
             AppCard(
               child: Form(
@@ -117,7 +119,7 @@ class _InDemandScreenState extends ConsumerState<InDemandScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _LabeledTextField(
+                    AppTextField(
                       label: 'Item Name',
                       hint: 'e.g. Cold brew coffee',
                       controller: _nameController,
@@ -130,7 +132,7 @@ class _InDemandScreenState extends ConsumerState<InDemandScreen> {
                       },
                     ),
                     const SizedBox(height: AppSizes.lg),
-                    _LabeledTextField(
+                    AppTextField(
                       label: 'Note (optional)',
                       hint: 'Add any specifics or details',
                       controller: _noteController,
@@ -149,7 +151,7 @@ class _InDemandScreenState extends ConsumerState<InDemandScreen> {
               ),
             ),
             const SizedBox(height: AppSizes.xxl),
-            Text('Requested Items', style: AppTypography.h4),
+            Text('Requested Items', style: AppTypography.h4.copyWith(color: context.appTextPrimary)),
             const SizedBox(height: AppSizes.md),
             if (inDemandCollection == null)
               _EmptyState(
@@ -211,60 +213,6 @@ class _InDemandScreenState extends ConsumerState<InDemandScreen> {
   }
 }
 
-class _LabeledTextField extends StatelessWidget {
-  final String label;
-  final String hint;
-  final TextEditingController controller;
-  final String? Function(String?)? validator;
-  final TextInputAction? textInputAction;
-  final int maxLines;
-
-  const _LabeledTextField({
-    required this.label,
-    required this.hint,
-    required this.controller,
-    this.validator,
-    this.textInputAction,
-    this.maxLines = 1,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: AppTypography.inputLabel),
-        const SizedBox(height: AppSizes.sm),
-        TextFormField(
-          controller: controller,
-          validator: validator,
-          maxLines: maxLines,
-          textInputAction: textInputAction,
-          style: AppTypography.input,
-          decoration: InputDecoration(
-            hintText: hint,
-            hintStyle: AppTypography.inputHint,
-            filled: true,
-            fillColor: AppColors.inputFill,
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: AppSizes.md,
-              vertical: AppSizes.sm,
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(AppSizes.radiusMd),
-              borderSide: const BorderSide(color: AppColors.inputBorder),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(AppSizes.radiusMd),
-              borderSide: const BorderSide(color: AppColors.coral),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
 class _InDemandItemCard extends StatelessWidget {
   final String name;
   final String note;
@@ -290,14 +238,14 @@ class _InDemandItemCard extends StatelessWidget {
               children: [
                 Text(
                   name.isEmpty ? 'Unnamed item' : name,
-                  style: AppTypography.bodyLarge,
+                  style: AppTypography.bodyLarge.copyWith(color: context.appTextPrimary),
                 ),
                 if (note.trim().isNotEmpty) ...[
                   const SizedBox(height: AppSizes.xs),
                   Text(
                     note,
                     style: AppTypography.bodySmall
-                        .copyWith(color: AppColors.textSecondary),
+                        .copyWith(color: context.appTextSecondary),
                   ),
                 ],
                 const SizedBox(height: AppSizes.md),
@@ -358,12 +306,12 @@ class _EmptyState extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: AppSizes.iconXxl, color: AppColors.textTertiary),
+          Icon(icon, size: AppSizes.iconXxl, color: context.appTextTertiary),
           const SizedBox(height: AppSizes.sm),
           Text(
             message,
             style: AppTypography.bodyMedium
-                .copyWith(color: AppColors.textSecondary),
+                .copyWith(color: context.appTextSecondary),
             textAlign: TextAlign.center,
           ),
         ],

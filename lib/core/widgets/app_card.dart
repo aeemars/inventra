@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../constants/app_colors.dart';
 import '../constants/app_sizes.dart';
+import '../extensions/theme_ext.dart';
 
 /// Card widget matching Figma card style with border and optional padding
 class AppCard extends StatelessWidget {
@@ -26,9 +27,9 @@ class AppCard extends StatelessWidget {
     final card = Container(
       padding: padding ?? const EdgeInsets.all(AppSizes.cardPadding),
       decoration: BoxDecoration(
-        color: color ?? AppColors.white,
+        color: color ?? context.appSurface,
         borderRadius: BorderRadius.circular(borderRadius ?? AppSizes.radiusLg),
-        border: border ?? Border.all(color: AppColors.cardBorder),
+        border: border ?? Border.all(color: context.appCardBorder),
         boxShadow: const [
           BoxShadow(
             color: AppColors.shadowLight,

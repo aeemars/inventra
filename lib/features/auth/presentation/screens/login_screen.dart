@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_sizes.dart';
 import '../../../../core/constants/app_typography.dart';
+import '../../../../core/extensions/theme_ext.dart';
 import '../../../../core/utils/validators.dart';
 import '../../../../core/widgets/app_button.dart';
 import '../../../../core/widgets/app_text_field.dart';
@@ -61,7 +62,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     });
 
     return Scaffold(
-      backgroundColor: AppColors.white,
+      backgroundColor: context.appSurface,
       body: SafeArea(
         child: SingleChildScrollView(
           padding:
@@ -98,7 +99,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 Text(
                   'Sign in to manage your inventory',
                   style: AppTypography.bodyMedium.copyWith(
-                    color: AppColors.textSecondary,
+                    color: context.appTextSecondary,
                   ),
                 ),
                 const SizedBox(height: AppSizes.huge),
@@ -130,7 +131,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           ? Icons.visibility_off_outlined
                           : Icons.visibility_outlined,
                       size: 20,
-                      color: AppColors.textTertiary,
+                      color: context.appTextTertiary,
                     ),
                     onPressed: () {
                       setState(() => _obscurePassword = !_obscurePassword);
@@ -166,7 +167,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       child: Text(
                         'Or continue with',
                         style: AppTypography.bodySmall.copyWith(
-                          color: AppColors.textTertiary,
+                          color: context.appTextTertiary,
                         ),
                       ),
                     ),
@@ -193,7 +194,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     Text(
                       "Don't have an account? ",
                       style: AppTypography.bodyMedium.copyWith(
-                        color: AppColors.textSecondary,
+                        color: context.appTextSecondary,
                       ),
                     ),
                     GestureDetector(
@@ -213,7 +214,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 Text(
                   'Inventra © 2026 | ShopManager Pro',
                   style: AppTypography.bodySmall.copyWith(
-                    color: AppColors.textTertiary,
+                    color: context.appTextTertiary,
                   ),
                 ),
                 const SizedBox(height: AppSizes.xl),
@@ -229,10 +230,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
       decoration: BoxDecoration(
-        border: Border.all(color: AppColors.cardBorder),
+        border: Border.all(color: context.appCardBorder),
         borderRadius: BorderRadius.circular(AppSizes.radiusMd),
       ),
-      child: Icon(icon, size: 28, color: AppColors.textSecondary),
+      child: Icon(icon, size: 28, color: context.appTextSecondary),
     );
   }
 }

@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_sizes.dart';
+import '../../../../core/extensions/theme_ext.dart';
+import '../../../../core/widgets/app_card.dart';
 import '../../domain/entities/product.dart';
 import '../../../auth/presentation/controllers/auth_controller.dart';
 import '../controllers/inventory_controller.dart';
@@ -210,36 +212,35 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
     final controllerState = ref.watch(inventoryControllerProvider);
 
     return Scaffold(
-      backgroundColor:
-          const Color(0xFFF8F9FB), // Light background like wireframe
+      backgroundColor: context.appBackground,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         centerTitle: false,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_rounded, color: Colors.black87),
+          icon: Icon(Icons.arrow_back_rounded, color: context.appTextPrimary),
           onPressed: () => context.pop(),
         ),
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(isEditing ? 'Edit Product' : 'New Product',
-                style: const TextStyle(
+                style: TextStyle(
                     fontWeight: FontWeight.w700,
                     fontSize: 18,
-                    color: Colors.black87)),
+                    color: context.appTextPrimary)),
             if (isEditing || _upcController.text.isNotEmpty)
               Text(
                   'ID: #${_upcController.text.isEmpty ? 'UPC-NEW' : _upcController.text}',
-                  style: const TextStyle(
-                      color: Colors.black54,
+                  style: TextStyle(
+                      color: context.appTextSecondary,
                       fontSize: 13,
                       fontWeight: FontWeight.normal)),
           ],
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.more_vert_rounded, color: Colors.black87),
+            icon: Icon(Icons.more_vert_rounded, color: context.appTextPrimary),
             onPressed: () {},
           ),
         ],
@@ -256,20 +257,8 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     // IDENTIFIED PRODUCT CARD
-                    Container(
+                    AppCard(
                       padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withAlpha(5),
-                            blurRadius: 10,
-                            offset: const Offset(0, 4),
-                          )
-                        ],
-                        border: Border.all(color: Colors.grey.shade200),
-                      ),
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
@@ -278,7 +267,7 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
                             width: 48,
                             height: 64,
                             decoration: BoxDecoration(
-                              color: Colors.grey.shade100,
+                              color: context.appInputFill,
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: _existingProduct?.imageUrl != null
@@ -301,9 +290,10 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
                                     Expanded(
                                       child: Text(
                                         _displayProductName,
-                                        style: const TextStyle(
+                                        style: TextStyle(
                                             fontWeight: FontWeight.w700,
                                             fontSize: 16,
+                                            color: context.appTextPrimary,
                                             height: 1.2),
                                       ),
                                     ),
@@ -332,8 +322,8 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
                                 const SizedBox(height: 4),
                                 Text(
                                   'Category: ${_categoryController.text.isEmpty ? 'Various' : _categoryController.text} | UPC: ${_upcController.text.isEmpty ? '...' : _upcController.text}',
-                                  style: const TextStyle(
-                                      color: Colors.black54, fontSize: 12),
+                                  style: TextStyle(
+                                      color: context.appTextSecondary, fontSize: 12),
                                 ),
                                 const SizedBox(height: 6),
                                 Row(
@@ -357,17 +347,12 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
                     const SizedBox(height: AppSizes.xxl),
 
                     // QUANTITY TO ADD
-                    const Text('Quantity to Add',
+                    Text('Quantity to Add',
                         style: TextStyle(
-                            fontWeight: FontWeight.w600, fontSize: 16)),
+                            fontWeight: FontWeight.w600, fontSize: 16, color: context.appTextPrimary)),
                     const SizedBox(height: AppSizes.md),
-                    Container(
+                    AppCard(
                       padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: Colors.grey.shade200),
-                      ),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
@@ -378,11 +363,11 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
                               width: 56,
                               height: 56,
                               decoration: BoxDecoration(
-                                color: const Color(0xFFF1F3F5),
+                                color: context.appInputFill,
                                 borderRadius: BorderRadius.circular(12),
                               ),
-                              child: const Icon(Icons.remove_rounded,
-                                  color: Colors.black54, size: 28),
+                              child: Icon(Icons.remove_rounded,
+                                  color: context.appTextPrimary, size: 28),
                             ),
                           ),
                           // Value text
@@ -390,12 +375,13 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Text('$_quantity',
-                                  style: const TextStyle(
-                                      fontSize: 24,
-                                      fontWeight: FontWeight.w800)),
-                              const Text('units',
                                   style: TextStyle(
-                                      fontSize: 12, color: Colors.grey)),
+                                      fontSize: 24,
+                                      color: context.appTextPrimary,
+                                      fontWeight: FontWeight.w800)),
+                              Text('units',
+                                  style: TextStyle(
+                                      fontSize: 12, color: context.appTextSecondary)),
                             ],
                           ),
                           // Plus button
@@ -418,9 +404,9 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
                     const SizedBox(height: AppSizes.xxl),
 
                     // DETAILS
-                    const Text('Details',
+                    Text('Details',
                         style: TextStyle(
-                            fontWeight: FontWeight.w600, fontSize: 16)),
+                            fontWeight: FontWeight.w600, fontSize: 16, color: context.appTextPrimary)),
                     const SizedBox(height: AppSizes.md),
 
                     _buildWireframeInput(
@@ -445,9 +431,11 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
                           .copyWith(dividerColor: Colors.transparent),
                       child: ExpansionTile(
                         tilePadding: EdgeInsets.zero,
-                        title: const Text('Master Data (Edit Product Info)',
+                        iconColor: context.appTextPrimary,
+                        collapsedIconColor: context.appTextPrimary,
+                        title: Text('Master Data (Edit Product Info)',
                             style: TextStyle(
-                                fontWeight: FontWeight.w600, fontSize: 14)),
+                                fontWeight: FontWeight.w600, fontSize: 14, color: context.appTextPrimary)),
                         children: [
                           _buildWireframeInput(
                               label: 'Name',
@@ -494,7 +482,7 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
               padding: EdgeInsets.fromLTRB(
                   24, 20, 24, MediaQuery.of(context).padding.bottom + 16),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: context.appSurfaceRaised,
                 borderRadius:
                     const BorderRadius.vertical(top: Radius.circular(24)),
                 boxShadow: [
@@ -510,12 +498,12 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('Total items adding:',
+                      Text('Total items adding:',
                           style:
-                              TextStyle(color: Colors.black54, fontSize: 14)),
+                              TextStyle(color: context.appTextSecondary, fontSize: 14)),
                       Text('$_quantity Unit${_quantity > 1 ? 's' : ''}',
-                          style: const TextStyle(
-                              fontWeight: FontWeight.w700, fontSize: 16)),
+                          style: TextStyle(
+                              fontWeight: FontWeight.w700, fontSize: 16, color: context.appTextPrimary)),
                     ],
                   ),
                   const SizedBox(height: 16),
@@ -544,9 +532,9 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  const Text(
+                  Text(
                       'This action will update the Central Database instantly.',
-                      style: TextStyle(color: Colors.grey, fontSize: 11)),
+                      style: TextStyle(color: context.appTextTertiary, fontSize: 11)),
                 ],
               ),
             ),
@@ -569,36 +557,37 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
         Row(
           children: [
             Icon(Icons.crop_free_rounded,
-                size: 14, color: Colors.grey.shade400),
+                size: 14, color: context.appTextTertiary),
             const SizedBox(width: 6),
             Text(label,
-                style: const TextStyle(
+                style: TextStyle(
                     fontSize: 13,
-                    color: Colors.black54,
+                    color: context.appTextSecondary,
                     fontWeight: FontWeight.w500)),
           ],
         ),
         const SizedBox(height: 8),
         TextFormField(
           controller: controller,
+          style: TextStyle(color: context.appTextPrimary, fontSize: 14),
           validator: isRequired ? (v) => v!.isEmpty ? 'Required' : null : null,
           decoration: InputDecoration(
             hintText: hint,
-            hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+            hintStyle: TextStyle(color: context.appTextTertiary, fontSize: 14),
             suffixIcon: icon != null
-                ? Icon(icon, color: Colors.grey.shade400, size: 20)
+                ? Icon(icon, color: context.appTextTertiary, size: 20)
                 : null,
             filled: true,
-            fillColor: Colors.white,
+            fillColor: context.appInputFill,
             contentPadding:
                 const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: Colors.grey.shade200),
+              borderSide: BorderSide(color: context.appCardBorder),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: Colors.grey.shade200),
+              borderSide: BorderSide(color: context.appCardBorder),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),

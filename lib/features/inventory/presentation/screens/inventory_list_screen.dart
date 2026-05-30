@@ -8,6 +8,7 @@ import '../../../../core/utils/formatters.dart';
 import '../../../../core/widgets/app_card.dart';
 import '../../../../core/widgets/app_text_field.dart';
 import '../../../../core/widgets/empty_state.dart';
+import '../../../../core/extensions/theme_ext.dart';
 import '../controllers/inventory_controller.dart';
 
 /// Inventory list screen with search, filter, sort
@@ -20,7 +21,7 @@ class InventoryListScreen extends ConsumerWidget {
     final searchQuery = ref.watch(productSearchQueryProvider);
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: context.appBackground,
       appBar: AppBar(
         title: const Text('Products'),
         actions: [
@@ -62,7 +63,7 @@ class InventoryListScreen extends ConsumerWidget {
                 Text(
                   '${products.length} product${products.length != 1 ? 's' : ''}',
                   style: AppTypography.bodySmall
-                      .copyWith(color: AppColors.textSecondary),
+                      .copyWith(color: context.appTextSecondary),
                 ),
                 const Spacer(),
                 _SortDropdown(),
@@ -188,7 +189,7 @@ class _ProductListTile extends StatelessWidget {
             width: 52,
             height: 52,
             decoration: BoxDecoration(
-              color: AppColors.inputFill,
+              color: context.appInputFill,
               borderRadius: BorderRadius.circular(10),
               image: product.imageUrl != null
                   ? DecorationImage(
@@ -198,8 +199,8 @@ class _ProductListTile extends StatelessWidget {
                   : null,
             ),
             child: product.imageUrl == null
-                ? const Icon(Icons.inventory_2_outlined,
-                    color: AppColors.textTertiary, size: 24)
+                ? Icon(Icons.inventory_2_outlined,
+                    color: context.appTextTertiary, size: 24)
                 : null,
           ),
           const SizedBox(width: 12),
@@ -212,7 +213,7 @@ class _ProductListTile extends StatelessWidget {
                 Text(
                   product.name,
                   style: AppTypography.labelLarge
-                      .copyWith(color: AppColors.textPrimary),
+                      .copyWith(color: context.appTextPrimary),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -220,7 +221,7 @@ class _ProductListTile extends StatelessWidget {
                 Text(
                   'SKU: ${product.sku}',
                   style: AppTypography.bodySmall
-                      .copyWith(color: AppColors.textTertiary),
+                      .copyWith(color: context.appTextTertiary),
                 ),
               ],
             ),

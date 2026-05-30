@@ -11,6 +11,7 @@ import '../../../../core/widgets/app_card.dart';
 import '../../../auth/presentation/controllers/auth_controller.dart';
 import '../../../inventory/presentation/controllers/inventory_controller.dart';
 import '../../../transactions/presentation/controllers/transaction_logs_controller.dart';
+import '../../../../core/extensions/theme_ext.dart';
 
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
@@ -53,7 +54,7 @@ class DashboardScreen extends ConsumerWidget {
     final salesToday = ref.watch(todaySalesCountProvider);
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: context.appBackground,
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(AppSizes.screenPaddingH),
@@ -73,12 +74,12 @@ class DashboardScreen extends ConsumerWidget {
                           user?.shopName?.isNotEmpty == true
                               ? user!.shopName!
                               : 'My Shop',
-                          style: AppTypography.h2),
+                          style: AppTypography.h2.copyWith(color: context.appTextPrimary)),
                       const SizedBox(height: 2),
                       Text(
                         'Welcome back, ${user?.displayName.isNotEmpty == true ? user!.displayName : 'User'}',
                         style: AppTypography.bodyMedium
-                            .copyWith(color: AppColors.textSecondary),
+                            .copyWith(color: context.appTextSecondary),
                       ),
                     ],
                   ),
@@ -170,11 +171,11 @@ class DashboardScreen extends ConsumerWidget {
                       children: [
                         Text('Inventory Value',
                             style: AppTypography.bodySmall
-                                .copyWith(color: AppColors.textSecondary)),
+                                .copyWith(color: context.appTextSecondary)),
                         const SizedBox(height: 2),
                         Text(
                           Formatters.currency(inventoryValue),
-                          style: AppTypography.h3,
+                          style: AppTypography.h3.copyWith(color: context.appTextPrimary),
                         ),
                       ],
                     ),
@@ -184,7 +185,7 @@ class DashboardScreen extends ConsumerWidget {
               const SizedBox(height: AppSizes.xxl),
 
               // ── Quick Actions ──
-              Text('Quick Actions', style: AppTypography.h4),
+              Text('Quick Actions', style: AppTypography.h4.copyWith(color: context.appTextPrimary)),
               const SizedBox(height: AppSizes.md),
               Row(
                 children: [
@@ -244,14 +245,20 @@ class _DashboardSummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cardBg = context.isDark ? context.appSurface : bgColor;
+    final valueColor = context.isDark ? context.appTextPrimary : AppColors.textPrimary;
+    final subtitleColor = context.isDark ? context.appTextSecondary : AppColors.textSecondary;
+    final cardBorder = context.isDark ? Border.all(color: context.appCardBorder) : null;
+
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: bgColor,
+          color: cardBg,
           borderRadius: BorderRadius.circular(AppSizes.radiusLg),
+          border: cardBorder,
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -274,20 +281,20 @@ class _DashboardSummaryCard extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               '$value',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 36,
                 fontWeight: FontWeight.w800,
-                color: AppColors.textPrimary,
+                color: valueColor,
                 height: 1.1,
               ),
             ),
             const SizedBox(height: 4),
             Text(
               subtitle,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w400,
-                color: AppColors.textSecondary,
+                color: subtitleColor,
               ),
             ),
           ],
@@ -333,13 +340,13 @@ class _StatCard extends StatelessWidget {
             const SizedBox(height: AppSizes.md),
             Text(
               value,
-              style: AppTypography.statMedium,
+              style: AppTypography.statMedium.copyWith(color: context.appTextPrimary),
             ),
             const SizedBox(height: 2),
             Text(
               label,
               style: AppTypography.bodySmall
-                  .copyWith(color: AppColors.textSecondary),
+                  .copyWith(color: context.appTextSecondary),
             ),
           ],
         ),
@@ -381,7 +388,7 @@ class _QuickAction extends StatelessWidget {
             Text(
               label,
               style: AppTypography.labelSmall
-                  .copyWith(color: AppColors.textSecondary),
+                  .copyWith(color: context.appTextSecondary),
               textAlign: TextAlign.center,
             ),
           ],

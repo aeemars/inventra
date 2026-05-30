@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_sizes.dart';
 import '../../../../core/constants/app_typography.dart';
+import '../../../../core/extensions/theme_ext.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../core/widgets/app_card.dart';
 import '../../../transactions/presentation/controllers/transaction_logs_controller.dart';
@@ -28,7 +29,7 @@ class ReportingScreen extends ConsumerWidget {
     final movementsAsync = ref.watch(stockMovementsProvider);
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: context.appBackground,
       appBar: AppBar(title: const Text('Reporting')),
       body: movementsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -41,7 +42,7 @@ class ReportingScreen extends ConsumerWidget {
               const SizedBox(height: 12),
               Text('Failed to load reports',
                   style: AppTypography.bodyMedium
-                      .copyWith(color: AppColors.textSecondary)),
+                      .copyWith(color: context.appTextSecondary)),
               const SizedBox(height: 8),
               TextButton(
                 onPressed: () => ref.invalidate(stockMovementsProvider),
@@ -78,13 +79,13 @@ class ReportingScreen extends ConsumerWidget {
               const SizedBox(height: AppSizes.xxl),
 
               // ── Sales Trends Chart ──
-              Text('Sales Trends (7 Days)', style: AppTypography.h4),
+              Text('Sales Trends (7 Days)', style: AppTypography.h4.copyWith(color: context.appTextPrimary)),
               const SizedBox(height: AppSizes.md),
               _SalesTrendsChart(dailySales: dailySales),
               const SizedBox(height: AppSizes.xxl),
 
               // ── Top Movers ──
-              Text('Top Movers', style: AppTypography.h4),
+              Text('Top Movers', style: AppTypography.h4.copyWith(color: context.appTextPrimary)),
               const SizedBox(height: AppSizes.md),
               if (topMovers.isEmpty)
                 AppCard(
@@ -96,12 +97,12 @@ class ReportingScreen extends ConsumerWidget {
                         children: [
                           Icon(Icons.trending_up,
                               size: 28,
-                              color: AppColors.textTertiary
+                              color: context.appTextTertiary
                                   .withValues(alpha: 0.5)),
                           const SizedBox(height: 8),
                           Text('No sales data yet',
                               style: AppTypography.bodySmall
-                                  .copyWith(color: AppColors.textTertiary)),
+                                  .copyWith(color: context.appTextTertiary)),
                         ],
                       ),
                     ),
@@ -127,7 +128,7 @@ class ReportingScreen extends ConsumerWidget {
               const SizedBox(height: AppSizes.xxl),
 
               // ── Recent Activity ──
-              Text('Recent Activity', style: AppTypography.h4),
+              Text('Recent Activity', style: AppTypography.h4.copyWith(color: context.appTextPrimary)),
               const SizedBox(height: AppSizes.md),
               if (recentActivity.isEmpty)
                 AppCard(
@@ -139,12 +140,12 @@ class ReportingScreen extends ConsumerWidget {
                         children: [
                           Icon(Icons.history,
                               size: 28,
-                              color: AppColors.textTertiary
+                              color: context.appTextTertiary
                                   .withValues(alpha: 0.5)),
                           const SizedBox(height: 8),
                           Text('No recent activity',
                               style: AppTypography.bodySmall
-                                  .copyWith(color: AppColors.textTertiary)),
+                                  .copyWith(color: context.appTextTertiary)),
                         ],
                       ),
                     ),
@@ -190,9 +191,9 @@ class _RevenueCard extends StatelessWidget {
         children: [
           Text(label,
               style: AppTypography.bodySmall
-                  .copyWith(color: AppColors.textSecondary)),
+                  .copyWith(color: context.appTextSecondary)),
           const SizedBox(height: 4),
-          Text(value, style: AppTypography.statMedium),
+          Text(value, style: AppTypography.statMedium.copyWith(color: context.appTextPrimary)),
           const SizedBox(height: 4),
           if (hasData)
             Row(
@@ -210,11 +211,11 @@ class _RevenueCard extends StatelessWidget {
               children: [
                 Icon(Icons.info_outline,
                     size: 14,
-                    color: AppColors.textTertiary.withValues(alpha: 0.7)),
+                    color: context.appTextTertiary.withValues(alpha: 0.7)),
                 const SizedBox(width: 4),
                 Text('No data yet',
                     style: AppTypography.labelSmall
-                        .copyWith(color: AppColors.textTertiary)),
+                        .copyWith(color: context.appTextTertiary)),
               ],
             ),
         ],
@@ -275,9 +276,9 @@ class _SalesTrendsChart extends StatelessWidget {
                           return Padding(
                             padding: const EdgeInsets.only(top: 6),
                             child: Text(dayName,
-                                style: const TextStyle(
+                                style: TextStyle(
                                     fontSize: 10,
-                                    color: AppColors.textTertiary)),
+                                    color: context.appTextTertiary)),
                           );
                         },
                       ),
@@ -305,16 +306,16 @@ class _SalesTrendsChart extends StatelessWidget {
                     Icon(Icons.bar_chart_rounded,
                         size: 40,
                         color:
-                            AppColors.textTertiary.withValues(alpha: 0.4)),
+                            context.appTextTertiary.withValues(alpha: 0.4)),
                     const SizedBox(height: 12),
                     Text('No sales in the last 7 days',
                         style: AppTypography.bodySmall
-                            .copyWith(color: AppColors.textTertiary)),
+                            .copyWith(color: context.appTextTertiary)),
                     const SizedBox(height: 4),
                     Text(
                         'Sales data will appear here once transactions are recorded',
                         style: AppTypography.labelSmall
-                            .copyWith(color: AppColors.textTertiary),
+                            .copyWith(color: context.appTextTertiary),
                         textAlign: TextAlign.center),
                   ],
                 ),
@@ -372,13 +373,13 @@ class _TopMoverCard extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(name,
-                style: AppTypography.labelMedium,
+                style: AppTypography.labelMedium.copyWith(color: context.appTextPrimary),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis),
             const SizedBox(height: 2),
             Text('$sold sold',
                 style: AppTypography.bodySmall
-                    .copyWith(color: AppColors.textTertiary)),
+                    .copyWith(color: context.appTextTertiary)),
             Text(Formatters.currency(revenue),
                 style: AppTypography.labelMedium
                     .copyWith(color: AppColors.primary)),
@@ -421,12 +422,12 @@ class _ActivityItem extends StatelessWidget {
           const SizedBox(width: 12),
           Expanded(
               child: Text(text,
-                  style: AppTypography.bodyMedium,
+                  style: AppTypography.bodyMedium.copyWith(color: context.appTextPrimary),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis)),
           Text(time,
               style: AppTypography.bodySmall
-                  .copyWith(color: AppColors.textTertiary)),
+                  .copyWith(color: context.appTextTertiary)),
         ],
       ),
     );

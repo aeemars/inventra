@@ -6,6 +6,7 @@ import 'package:permission_handler/permission_handler.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_sizes.dart';
 import '../../../../core/constants/app_typography.dart';
+import '../../../../core/extensions/theme_ext.dart';
 import '../../../../core/router/scanner_route_access.dart';
 import '../../../../core/utils/debouncer.dart';
 import '../../../../core/utils/formatters.dart';
@@ -239,9 +240,9 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen>
       backgroundColor: Colors.transparent,
       builder: (ctx) => Container(
         padding: const EdgeInsets.all(AppSizes.xxl),
-        decoration: const BoxDecoration(
-          color: AppColors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        decoration: BoxDecoration(
+          color: ctx.appSurfaceRaised,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -250,7 +251,7 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen>
               width: 40,
               height: 4,
               decoration: BoxDecoration(
-                color: AppColors.divider,
+                color: ctx.appDivider,
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -271,7 +272,7 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen>
             Text(
               'No product matches barcode:\n$barcode',
               style: AppTypography.bodyMedium
-                  .copyWith(color: AppColors.textSecondary),
+                  .copyWith(color: ctx.appTextSecondary),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: AppSizes.xxl),
@@ -720,9 +721,9 @@ class _ScanIntentSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(AppSizes.xxl),
-      decoration: const BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      decoration: BoxDecoration(
+        color: context.appSurfaceRaised,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -733,7 +734,7 @@ class _ScanIntentSheet extends StatelessWidget {
               width: 40,
               height: 4,
               decoration: BoxDecoration(
-                color: AppColors.divider,
+                color: context.appDivider,
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -744,7 +745,7 @@ class _ScanIntentSheet extends StatelessWidget {
           Text(
             'Choose one option before scanning.',
             style: AppTypography.bodyMedium
-                .copyWith(color: AppColors.textSecondary),
+                .copyWith(color: context.appTextSecondary),
           ),
           const SizedBox(height: AppSizes.xl),
           _IntentOptionTile(
@@ -796,12 +797,12 @@ class _IntentOptionTile extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: isActive ? AppColors.primary : AppColors.divider,
+              color: isActive ? AppColors.primary : context.appDivider,
               width: isActive ? 1.8 : 1,
             ),
             color: isActive
                 ? AppColors.primary.withValues(alpha: 0.08)
-                : AppColors.white,
+                : context.appSurfaceRaised,
           ),
           child: Row(
             children: [
@@ -811,12 +812,12 @@ class _IntentOptionTile extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: isActive
                       ? AppColors.primary.withValues(alpha: 0.16)
-                      : AppColors.inputFill,
+                      : context.appInputFill,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(
                   icon,
-                  color: isActive ? AppColors.primary : AppColors.textPrimary,
+                  color: isActive ? AppColors.primary : context.appTextPrimary,
                 ),
               ),
               const SizedBox(width: 12),
@@ -829,7 +830,7 @@ class _IntentOptionTile extends StatelessWidget {
                     Text(
                       subtitle,
                       style: AppTypography.bodySmall
-                          .copyWith(color: AppColors.textSecondary),
+                          .copyWith(color: context.appTextSecondary),
                     ),
                   ],
                 ),
@@ -962,9 +963,9 @@ class _QuickSellSheetState extends State<_QuickSellSheet> {
     return Container(
       padding: EdgeInsets.fromLTRB(AppSizes.xxl, AppSizes.xxl, AppSizes.xxl,
           MediaQuery.of(context).padding.bottom + AppSizes.lg),
-      decoration: const BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      decoration: BoxDecoration(
+        color: context.appSurfaceRaised,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -973,7 +974,7 @@ class _QuickSellSheetState extends State<_QuickSellSheet> {
             width: 40,
             height: 4,
             decoration: BoxDecoration(
-              color: AppColors.divider,
+              color: context.appDivider,
               borderRadius: BorderRadius.circular(2),
             ),
           ),
@@ -1000,7 +1001,7 @@ class _QuickSellSheetState extends State<_QuickSellSheet> {
                     Text('New Sale', style: AppTypography.h4),
                     Text('Enter quantity to complete sale',
                         style: AppTypography.bodySmall
-                            .copyWith(color: AppColors.textSecondary)),
+                            .copyWith(color: context.appTextSecondary)),
                   ],
                 ),
               ),
@@ -1013,7 +1014,7 @@ class _QuickSellSheetState extends State<_QuickSellSheet> {
             width: double.infinity,
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: AppColors.inputFill,
+              color: context.appInputFill,
               borderRadius: BorderRadius.circular(12),
             ),
             child: Column(
@@ -1021,19 +1022,19 @@ class _QuickSellSheetState extends State<_QuickSellSheet> {
               children: [
                 Text('Product Name',
                     style: AppTypography.bodySmall
-                        .copyWith(color: AppColors.textSecondary)),
+                        .copyWith(color: context.appTextSecondary)),
                 const SizedBox(height: 2),
                 Text(widget.product.name, style: AppTypography.labelLarge),
                 const SizedBox(height: 8),
                 Text('Product ID',
                     style: AppTypography.bodySmall
-                        .copyWith(color: AppColors.textSecondary)),
+                        .copyWith(color: context.appTextSecondary)),
                 const SizedBox(height: 2),
                 Text(widget.product.id, style: AppTypography.bodyMedium),
                 const SizedBox(height: 8),
                 Text('Selling Price',
                     style: AppTypography.bodySmall
-                        .copyWith(color: AppColors.textSecondary)),
+                        .copyWith(color: context.appTextSecondary)),
                 const SizedBox(height: 2),
                 Text(Formatters.currency(widget.product.sellingPrice),
                     style: AppTypography.labelLarge),
@@ -1046,7 +1047,7 @@ class _QuickSellSheetState extends State<_QuickSellSheet> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             decoration: BoxDecoration(
-              color: AppColors.inputFill,
+              color: context.appInputFill,
               borderRadius: BorderRadius.circular(10),
             ),
             child: Row(
@@ -1054,7 +1055,7 @@ class _QuickSellSheetState extends State<_QuickSellSheet> {
               children: [
                 Text('Available Stock',
                     style: AppTypography.bodyMedium
-                        .copyWith(color: AppColors.textSecondary)),
+                        .copyWith(color: context.appTextSecondary)),
                 Text('${widget.product.quantity} ${widget.product.unit}',
                     style: AppTypography.labelLarge),
               ],
@@ -1073,7 +1074,7 @@ class _QuickSellSheetState extends State<_QuickSellSheet> {
               hintText: 'Enter quantity',
               helperText: 'Unit: ${widget.product.unit}',
               filled: true,
-              fillColor: AppColors.inputFill,
+              fillColor: context.appInputFill,
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
                 borderSide: BorderSide.none,

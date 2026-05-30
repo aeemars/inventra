@@ -52,4 +52,18 @@ class AppColors {
     Color(0xFFC62828),
     Color(0xFF00838F),
   ];
+
+  // ── Dark Mode Neutrals ──
+  static const Color darkBackground    = Color(0xFF111318);
+  static const Color darkSurface       = Color(0xFF1C1F26);
+  static const Color darkSurfaceRaised = Color(0xFF23272F);
+  static const Color darkCardBorder    = Color(0xFF2C2F36);
+  static const Color darkDivider       = Color(0xFF2C2F36);
+  static const Color darkInputFill     = Color(0xFF1C1F26);
+  static const Color darkInputBorder   = Color(0xFF383C46);
+
+  // ── Dark Mode Text ──
+  static const Color darkTextPrimary   = Color(0xFFF0F2F5);
+  static const Color darkTextSecondary = Color(0xFF9AA0AB);
+  static const Color darkTextTertiary  = Color(0xFF5C6370);
 }

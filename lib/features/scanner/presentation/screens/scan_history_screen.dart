@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_sizes.dart';
 import '../../../../core/constants/app_typography.dart';
+import '../../../../core/extensions/theme_ext.dart';
 import '../../../../shared/models/scan_history_entry.dart';
 import '../controllers/scanner_controller.dart';
 
@@ -17,13 +18,13 @@ class ScanHistoryScreen extends ConsumerWidget {
     final historyAsync = ref.watch(scanHistoryProvider);
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: context.appBackground,
       appBar: AppBar(
-        backgroundColor: AppColors.white,
+        backgroundColor: context.appSurfaceRaised,
         elevation: 0,
         scrolledUnderElevation: 0.5,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: AppColors.textPrimary),
+          icon: Icon(Icons.arrow_back, color: context.appTextPrimary),
           onPressed: () => Navigator.of(context).pop(),
         ),
         title: Text(
@@ -31,7 +32,7 @@ class ScanHistoryScreen extends ConsumerWidget {
           style: GoogleFonts.inter(
             fontSize: 20,
             fontWeight: FontWeight.w700,
-            color: AppColors.textPrimary,
+            color: context.appTextPrimary,
           ),
         ),
         centerTitle: false,
@@ -54,7 +55,7 @@ class ScanHistoryScreen extends ConsumerWidget {
                 const SizedBox(height: 8),
                 Text(err.toString(),
                     style: AppTypography.bodySmall
-                        .copyWith(color: AppColors.textSecondary),
+                        .copyWith(color: context.appTextSecondary),
                     textAlign: TextAlign.center),
               ],
             ),
@@ -99,7 +100,7 @@ class ScanHistoryScreen extends ConsumerWidget {
                           style: GoogleFonts.inter(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
-                            color: AppColors.textSecondary,
+                            color: context.appTextSecondary,
                             letterSpacing: 0.5,
                           ),
                         ),
@@ -110,7 +111,7 @@ class ScanHistoryScreen extends ConsumerWidget {
                           style: GoogleFonts.inter(
                             fontSize: 12,
                             fontWeight: FontWeight.w500,
-                            color: AppColors.textTertiary,
+                            color: context.appTextTertiary,
                           ),
                         ),
                       ],
@@ -289,20 +290,20 @@ class _EmptyState extends StatelessWidget {
               width: 72,
               height: 72,
               decoration: BoxDecoration(
-                color: AppColors.inputFill,
+                color: context.appInputFill,
                 borderRadius: BorderRadius.circular(20),
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.qr_code_scanner_rounded,
                 size: 36,
-                color: AppColors.textTertiary,
+                color: context.appTextTertiary,
               ),
             ),
             const SizedBox(height: 20),
             Text(
               'No scans recorded yet',
               style: AppTypography.bodyLarge.copyWith(
-                color: AppColors.textSecondary,
+                color: context.appTextSecondary,
                 fontWeight: FontWeight.w500,
               ),
               textAlign: TextAlign.center,
@@ -311,7 +312,7 @@ class _EmptyState extends StatelessWidget {
             Text(
               'Your scan history will appear here\nafter scanning barcodes.',
               style: AppTypography.bodySmall
-                  .copyWith(color: AppColors.textTertiary),
+                  .copyWith(color: context.appTextTertiary),
               textAlign: TextAlign.center,
             ),
           ],

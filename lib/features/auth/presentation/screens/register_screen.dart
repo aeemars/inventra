@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_sizes.dart';
 import '../../../../core/constants/app_typography.dart';
+import '../../../../core/extensions/theme_ext.dart';
 import '../../../../core/utils/validators.dart';
 import '../../../../core/widgets/app_button.dart';
 import '../../../../core/widgets/app_text_field.dart';
@@ -72,7 +73,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     });
 
     return Scaffold(
-      backgroundColor: AppColors.white,
+      backgroundColor: context.appSurface,
       body: SafeArea(
         child: SingleChildScrollView(
           padding:
@@ -116,7 +117,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                     Text(
                       'Select your role and enter details to get started.',
                       style: AppTypography.bodyMedium.copyWith(
-                        color: AppColors.textSecondary,
+                        color: context.appTextSecondary,
                       ),
                     ),
                   ],
@@ -127,7 +128,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                 Text(
                   'Account Type',
                   style: AppTypography.labelLarge.copyWith(
-                    color: AppColors.textSecondary,
+                    color: context.appTextSecondary,
                   ),
                 ),
                 const SizedBox(height: AppSizes.md),
@@ -146,7 +147,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                           decoration: BoxDecoration(
                             color: isSelected
                                 ? AppColors.primarySurface
-                                : AppColors.inputFill,
+                                : context.appInputFill,
                             borderRadius:
                                 BorderRadius.circular(AppSizes.radiusMd),
                             border: Border.all(
@@ -163,7 +164,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                                 _roleIcon(role),
                                 color: isSelected
                                     ? AppColors.primary
-                                    : AppColors.textTertiary,
+                                    : context.appTextTertiary,
                                 size: 24,
                               ),
                               const SizedBox(height: 6),
@@ -176,7 +177,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                                       : FontWeight.w400,
                                   color: isSelected
                                       ? AppColors.primary
-                                      : AppColors.textSecondary,
+                                      : context.appTextSecondary,
                                 ),
                               ),
                             ],
@@ -238,7 +239,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                           ? Icons.visibility_off_outlined
                           : Icons.visibility_outlined,
                       size: 20,
-                      color: AppColors.textTertiary,
+                      color: context.appTextTertiary,
                     ),
                     onPressed: () {
                       setState(() => _obscurePassword = !_obscurePassword);
@@ -264,7 +265,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                       Text(
                         'Already have an account? ',
                         style: AppTypography.bodyMedium.copyWith(
-                          color: AppColors.textSecondary,
+                          color: context.appTextSecondary,
                         ),
                       ),
                       GestureDetector(

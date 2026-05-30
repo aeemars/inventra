@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_sizes.dart';
 import '../../../../core/constants/app_typography.dart';
+import '../../../../core/extensions/theme_ext.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../core/widgets/app_button.dart';
 import '../../../../core/widgets/app_card.dart';
@@ -79,7 +80,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     final total = 0.0;
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: context.appBackground,
       appBar: AppBar(
         title: const Text('Checkout'),
         leading: IconButton(
@@ -115,7 +116,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text('Subtotal', style: AppTypography.bodyMedium.copyWith(color: AppColors.textSecondary)),
+                      Text('Subtotal', style: AppTypography.bodyMedium.copyWith(color: context.appTextSecondary)),
                       Text(Formatters.currency(subtotal), style: AppTypography.labelMedium),
                     ],
                   ),
@@ -168,7 +169,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                               borderRadius: BorderRadius.circular(10),
                             ),
                             child: Icon(m['icon'] as IconData,
-                                color: _paymentMethod == m['id'] ? AppColors.primary : AppColors.textTertiary, size: 20),
+                                color: _paymentMethod == m['id'] ? AppColors.primary : context.appTextTertiary, size: 20),
                           ),
                           const SizedBox(width: 12),
                           Text(m['label'] as String, style: AppTypography.labelLarge),

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_typography.dart';
+import '../../../../core/extensions/theme_ext.dart';
 import '../controllers/auth_controller.dart';
 
 /// Splash screen with logo animation and auth state check
@@ -72,7 +73,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.white,
+      backgroundColor: context.appSurface,
       body: Center(
         child: FadeTransition(
           opacity: _fadeAnim,
@@ -114,7 +115,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                 Text(
                   'Smart Inventory Manager',
                   style: AppTypography.bodyMedium.copyWith(
-                    color: AppColors.textSecondary,
+                    color: context.appTextSecondary,
                   ),
                 ),
                 const SizedBox(height: 48),

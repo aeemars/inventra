@@ -11,6 +11,8 @@ import '../../../../core/constants/app_typography.dart';
 import '../../../../core/utils/validators.dart';
 import '../../../../core/widgets/app_button.dart';
 import '../../../../core/widgets/app_text_field.dart';
+import '../../../../core/theme/theme_provider.dart';
+import '../../../../core/extensions/theme_ext.dart';
 import '../controllers/auth_controller.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
@@ -68,7 +70,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       builder: (ctx) => Container(
         margin: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: AppColors.white,
+          color: context.appSurfaceRaised,
           borderRadius: BorderRadius.circular(AppSizes.radiusLg),
         ),
         child: SafeArea(
@@ -80,7 +82,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 width: 40,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: AppColors.textTertiary.withValues(alpha: 0.3),
+                  color: context.appTextTertiary.withValues(alpha: 0.3),
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -101,10 +103,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 ),
                 title: const Text('Take a Photo'),
                 subtitle: Text('Use your camera',
-                    style: TextStyle(color: AppColors.textTertiary, fontSize: 13)),
+                    style: TextStyle(color: context.appTextTertiary, fontSize: 13)),
                 onTap: () => Navigator.of(ctx).pop(ImageSource.camera),
               ),
-              Divider(height: 1, indent: 70, color: AppColors.textTertiary.withValues(alpha: 0.15)),
+              Divider(height: 1, indent: 70, color: context.appTextTertiary.withValues(alpha: 0.15)),
               ListTile(
                 leading: Container(
                   width: 44,
@@ -118,7 +120,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 ),
                 title: const Text('Choose from Gallery'),
                 subtitle: Text('Pick an existing photo',
-                    style: TextStyle(color: AppColors.textTertiary, fontSize: 13)),
+                    style: TextStyle(color: context.appTextTertiary, fontSize: 13)),
                 onTap: () => Navigator.of(ctx).pop(ImageSource.gallery),
               ),
               const SizedBox(height: 12),
@@ -209,7 +211,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
             child: Text('Cancel',
-                style: TextStyle(color: AppColors.textSecondary)),
+                style: TextStyle(color: context.appTextSecondary)),
           ),
           TextButton(
             onPressed: () {
@@ -249,24 +251,24 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         .toUpperCase();
 
     return Scaffold(
-      backgroundColor: AppColors.white,
+      backgroundColor: context.appSurface,
       appBar: AppBar(
-        backgroundColor: AppColors.white,
+        backgroundColor: context.appSurface,
         elevation: 0,
         leading: GestureDetector(
           onTap: () => context.pop(),
-          child: const Padding(
-            padding: EdgeInsets.all(12),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
             child: Icon(Icons.store_rounded,
-                color: AppColors.textPrimary, size: 24),
+                color: context.appTextPrimary, size: 24),
           ),
         ),
         title: Text('Edit Profile', style: AppTypography.h3),
         centerTitle: false,
         actions: [
           PopupMenuButton<String>(
-            icon: const Icon(Icons.more_vert,
-                color: AppColors.textPrimary),
+            icon: Icon(Icons.more_vert,
+                color: context.appTextPrimary),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(AppSizes.radiusMd),
             ),
@@ -452,8 +454,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       hint: 'Enter your full name',
                       validator: (v) => Validators.required(v, 'Name'),
                       textInputAction: TextInputAction.next,
-                      suffixIcon: const Icon(Icons.person_rounded,
-                          size: 20, color: AppColors.textTertiary),
+                      suffixIcon: Icon(Icons.person_rounded,
+                          size: 20, color: context.appTextTertiary),
                     ),
                     const SizedBox(height: AppSizes.xxl),
 
@@ -465,8 +467,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       hint: 'Email',
                       readOnly: true,
                       enabled: false,
-                      suffixIcon: const Icon(Icons.alternate_email,
-                          size: 20, color: AppColors.textTertiary),
+                      suffixIcon: Icon(Icons.alternate_email,
+                          size: 20, color: context.appTextTertiary),
                     ),
                     const SizedBox(height: AppSizes.xxl),
 
@@ -483,8 +485,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         if (v == null || v.trim().isEmpty) return null;
                         return Validators.phone(v);
                       },
-                      suffixIcon: const Icon(Icons.phone_rounded,
-                          size: 20, color: AppColors.textTertiary),
+                      suffixIcon: Icon(Icons.phone_rounded,
+                          size: 20, color: context.appTextTertiary),
                     ),
                     const SizedBox(height: AppSizes.xxl),
 
@@ -497,10 +499,61 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       textInputAction: TextInputAction.done,
                       validator: (v) =>
                           Validators.required(v, 'Shop Name'),
-                      suffixIcon: const Icon(Icons.store_rounded,
-                          size: 20, color: AppColors.textTertiary),
+                      suffixIcon: Icon(Icons.store_rounded,
+                          size: 20, color: context.appTextTertiary),
                     ),
-                    const SizedBox(height: AppSizes.xxxl),
+                    const SizedBox(height: AppSizes.xxl),
+
+                    // ── Appearance ──
+                    _ProfileFieldLabel(label: 'APPEARANCE'),
+                    const SizedBox(height: AppSizes.sm),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: context.appSurface,
+                        borderRadius: BorderRadius.circular(AppSizes.radiusLg),
+                        border: Border.all(color: context.appCardBorder),
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 40, height: 40,
+                            decoration: BoxDecoration(
+                              color: AppColors.primarySurface,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Icon(
+                              ref.watch(themeModeProvider) == ThemeMode.dark
+                                  ? Icons.dark_mode_rounded
+                                  : Icons.light_mode_rounded,
+                              color: AppColors.primary, size: 20,
+                            ),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('Dark Mode', style: AppTypography.bodyMedium),
+                                Text(
+                                  ref.watch(themeModeProvider) == ThemeMode.dark
+                                      ? 'Currently dark'
+                                      : 'Currently light',
+                                  style: AppTypography.bodySmall
+                                      .copyWith(color: context.appTextSecondary),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Switch(
+                            value: ref.watch(themeModeProvider) == ThemeMode.dark,
+                            onChanged: (_) => ref.read(themeModeProvider.notifier).toggle(),
+                            activeThumbColor: AppColors.primary,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: AppSizes.xxl),
 
                     // ── Save Changes Button ──
                     AppButton(
@@ -563,7 +616,7 @@ class _ProfileFieldLabel extends StatelessWidget {
     return Text(
       label,
       style: AppTypography.labelSmall.copyWith(
-        color: AppColors.textSecondary,
+        color: context.appTextSecondary,
         fontWeight: FontWeight.w600,
         letterSpacing: 0.8,
       ),

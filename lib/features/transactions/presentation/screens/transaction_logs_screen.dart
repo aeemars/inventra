@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_sizes.dart';
 import '../../../../core/constants/app_typography.dart';
+import '../../../../core/extensions/theme_ext.dart';
 import '../controllers/transaction_logs_controller.dart';
 
 /// Transaction Logs screen matching the Figma reference:
@@ -23,13 +24,13 @@ class TransactionLogsScreen extends ConsumerWidget {
     final currentFilter = ref.watch(transactionFilterProvider);
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: context.appBackground,
       appBar: AppBar(
-        backgroundColor: AppColors.white,
+        backgroundColor: context.appSurfaceRaised,
         elevation: 0,
         scrolledUnderElevation: 0.5,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: AppColors.textPrimary),
+          icon: Icon(Icons.arrow_back, color: context.appTextPrimary),
           onPressed: () => Navigator.of(context).pop(),
         ),
         title: Text(
@@ -37,14 +38,14 @@ class TransactionLogsScreen extends ConsumerWidget {
           style: GoogleFonts.inter(
             fontSize: 20,
             fontWeight: FontWeight.w700,
-            color: AppColors.textPrimary,
+            color: context.appTextPrimary,
           ),
         ),
         centerTitle: false,
         actions: [
           PopupMenuButton<TransactionFilter>(
-            icon: const Icon(Icons.filter_list_rounded,
-                color: AppColors.textPrimary),
+            icon: Icon(Icons.filter_list_rounded,
+                color: context.appTextPrimary),
             onSelected: (filter) {
               ref.read(transactionFilterProvider.notifier).state = filter;
             },
@@ -87,7 +88,7 @@ class TransactionLogsScreen extends ConsumerWidget {
                 const SizedBox(height: 8),
                 Text(err.toString(),
                     style: AppTypography.bodySmall
-                        .copyWith(color: AppColors.textSecondary),
+                        .copyWith(color: context.appTextSecondary),
                     textAlign: TextAlign.center),
               ],
             ),
@@ -95,7 +96,7 @@ class TransactionLogsScreen extends ConsumerWidget {
         ),
         data: (_) => Column(
           children: [
-            const Divider(height: 1, color: AppColors.divider),
+            Divider(height: 1, color: context.appDivider),
 
             // ── Summary Cards ──
             Padding(
@@ -189,11 +190,17 @@ class _SummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cardBg = context.isDark ? context.appSurface : bgColor;
+    final valueColor = context.isDark ? context.appTextPrimary : AppColors.textPrimary;
+    final subtitleColor = context.isDark ? context.appTextSecondary : AppColors.textSecondary;
+    final cardBorder = context.isDark ? Border.all(color: context.appCardBorder) : null;
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: bgColor,
+        color: cardBg,
         borderRadius: BorderRadius.circular(AppSizes.radiusLg),
+        border: cardBorder,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -221,7 +228,7 @@ class _SummaryCard extends StatelessWidget {
             style: GoogleFonts.inter(
               fontSize: 36,
               fontWeight: FontWeight.w800,
-              color: AppColors.textPrimary,
+              color: valueColor,
               height: 1.1,
             ),
           ),
@@ -232,7 +239,7 @@ class _SummaryCard extends StatelessWidget {
             style: GoogleFonts.inter(
               fontSize: 11,
               fontWeight: FontWeight.w400,
-              color: AppColors.textSecondary,
+              color: subtitleColor,
             ),
           ),
         ],
@@ -284,7 +291,7 @@ class _TransactionList extends StatelessWidget {
                     style: GoogleFonts.inter(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: AppColors.textSecondary,
+                      color: context.appTextSecondary,
                       letterSpacing: 0.5,
                     ),
                   ),
@@ -293,7 +300,7 @@ class _TransactionList extends StatelessWidget {
                     style: GoogleFonts.inter(
                       fontSize: 12,
                       fontWeight: FontWeight.w500,
-                      color: AppColors.textTertiary,
+                      color: context.appTextTertiary,
                     ),
                   ),
                 ],
@@ -337,9 +344,9 @@ class _TransactionTile extends StatelessWidget {
     final changeColor = isPositive
         ? const Color(0xFF16A34A) // green
         : const Color(0xFFDC2626); // red
-    final iconBgColor = isPositive
-        ? const Color(0xFFDCFCE7) // light green
-        : const Color(0xFFFEE2E2); // light red
+    final iconBgColor = context.isDark
+        ? (isPositive ? const Color(0xFF16A34A).withValues(alpha: 0.15) : const Color(0xFFDC2626).withValues(alpha: 0.15))
+        : (isPositive ? const Color(0xFFDCFCE7) : const Color(0xFFFEE2E2));
     final iconColor = isPositive
         ? const Color(0xFF16A34A)
         : const Color(0xFFDC2626);
@@ -352,9 +359,9 @@ class _TransactionTile extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
-        color: AppColors.white,
+        color: context.appSurface,
         borderRadius: BorderRadius.circular(AppSizes.radiusLg),
-        border: Border.all(color: AppColors.cardBorder),
+        border: Border.all(color: context.appCardBorder),
         boxShadow: const [
           BoxShadow(
             color: AppColors.shadowLight,
@@ -391,7 +398,7 @@ class _TransactionTile extends StatelessWidget {
                   style: GoogleFonts.inter(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
-                    color: AppColors.textPrimary,
+                    color: context.appTextPrimary,
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -402,7 +409,7 @@ class _TransactionTile extends StatelessWidget {
                   style: GoogleFonts.inter(
                     fontSize: 11,
                     fontWeight: FontWeight.w400,
-                    color: AppColors.textSecondary,
+                    color: context.appTextSecondary,
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -429,7 +436,7 @@ class _TransactionTile extends StatelessWidget {
                 style: GoogleFonts.inter(
                   fontSize: 11,
                   fontWeight: FontWeight.w400,
-                  color: AppColors.textTertiary,
+                  color: context.appTextTertiary,
                 ),
               ),
             ],
@@ -466,20 +473,20 @@ class _EmptyState extends StatelessWidget {
               width: 72,
               height: 72,
               decoration: BoxDecoration(
-                color: AppColors.inputFill,
+                color: context.appInputFill,
                 borderRadius: BorderRadius.circular(20),
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.receipt_long_outlined,
                 size: 36,
-                color: AppColors.textTertiary,
+                color: context.appTextTertiary,
               ),
             ),
             const SizedBox(height: 20),
             Text(
               message,
               style: AppTypography.bodyLarge.copyWith(
-                color: AppColors.textSecondary,
+                color: context.appTextSecondary,
                 fontWeight: FontWeight.w500,
               ),
               textAlign: TextAlign.center,
@@ -488,7 +495,7 @@ class _EmptyState extends StatelessWidget {
             Text(
               'Transaction logs will appear here\nafter scanning products.',
               style: AppTypography.bodySmall
-                  .copyWith(color: AppColors.textTertiary),
+                  .copyWith(color: context.appTextTertiary),
               textAlign: TextAlign.center,
             ),
           ],

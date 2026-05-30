@@ -11,14 +11,6 @@ import 'firebase_options.dart';
 Future<void> bootstrap() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // System UI
-  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-    statusBarColor: Colors.transparent,
-    statusBarIconBrightness: Brightness.dark,
-    systemNavigationBarColor: Colors.white,
-    systemNavigationBarIconBrightness: Brightness.dark,
-  ));
-
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
@@ -52,5 +44,6 @@ Future<void> bootstrap() async {
 
   // Hive (local storage)
   await Hive.initFlutter();
+  await Hive.openBox<dynamic>('app_prefs');
   registerHiveAdapters();
 }
