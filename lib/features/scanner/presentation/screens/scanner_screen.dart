@@ -267,7 +267,7 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen>
                   color: AppColors.warning, size: 32),
             ),
             const SizedBox(height: AppSizes.lg),
-            Text('Product Not Found', style: AppTypography.h4),
+            Text('Product Not Found', style: AppTypography.h4.copyWith(color: ctx.appTextPrimary)),
             const SizedBox(height: AppSizes.sm),
             Text(
               'No product matches barcode:\n$barcode',
@@ -740,7 +740,7 @@ class _ScanIntentSheet extends StatelessWidget {
             ),
           ),
           const SizedBox(height: AppSizes.xl),
-          Text('What is this scan for?', style: AppTypography.h4),
+          Text('What is this scan for?', style: AppTypography.h4.copyWith(color: context.appTextPrimary)),
           const SizedBox(height: AppSizes.sm),
           Text(
             'Choose one option before scanning.',
@@ -825,7 +825,7 @@ class _IntentOptionTile extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(title, style: AppTypography.labelLarge),
+                    Text(title, style: AppTypography.labelLarge.copyWith(color: context.appTextPrimary)),
                     const SizedBox(height: 2),
                     Text(
                       subtitle,
@@ -998,7 +998,7 @@ class _QuickSellSheetState extends State<_QuickSellSheet> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('New Sale', style: AppTypography.h4),
+                    Text('New Sale', style: AppTypography.h4.copyWith(color: context.appTextPrimary)),
                     Text('Enter quantity to complete sale',
                         style: AppTypography.bodySmall
                             .copyWith(color: context.appTextSecondary)),
@@ -1024,20 +1024,20 @@ class _QuickSellSheetState extends State<_QuickSellSheet> {
                     style: AppTypography.bodySmall
                         .copyWith(color: context.appTextSecondary)),
                 const SizedBox(height: 2),
-                Text(widget.product.name, style: AppTypography.labelLarge),
+                Text(widget.product.name, style: AppTypography.labelLarge.copyWith(color: context.appTextPrimary)),
                 const SizedBox(height: 8),
                 Text('Product ID',
                     style: AppTypography.bodySmall
                         .copyWith(color: context.appTextSecondary)),
                 const SizedBox(height: 2),
-                Text(widget.product.id, style: AppTypography.bodyMedium),
+                Text(widget.product.id, style: AppTypography.bodyMedium.copyWith(color: context.appTextPrimary)),
                 const SizedBox(height: 8),
                 Text('Selling Price',
                     style: AppTypography.bodySmall
                         .copyWith(color: context.appTextSecondary)),
                 const SizedBox(height: 2),
                 Text(Formatters.currency(widget.product.sellingPrice),
-                    style: AppTypography.labelLarge),
+                    style: AppTypography.labelLarge.copyWith(color: context.appTextPrimary)),
               ],
             ),
           ),
@@ -1057,22 +1057,25 @@ class _QuickSellSheetState extends State<_QuickSellSheet> {
                     style: AppTypography.bodyMedium
                         .copyWith(color: context.appTextSecondary)),
                 Text('${widget.product.quantity} ${widget.product.unit}',
-                    style: AppTypography.labelLarge),
+                    style: AppTypography.labelLarge.copyWith(color: context.appTextPrimary)),
               ],
             ),
           ),
           const SizedBox(height: AppSizes.lg),
 
           // Quantity input
-          Text('Quantity', style: AppTypography.labelLarge),
+          Text('Quantity', style: AppTypography.labelLarge.copyWith(color: context.appTextPrimary)),
           const SizedBox(height: AppSizes.sm),
           TextField(
             controller: _quantityController,
             keyboardType: TextInputType.number,
+            style: TextStyle(color: context.appTextPrimary, fontSize: 14),
             onChanged: (_) => setState(() {}),
             decoration: InputDecoration(
               hintText: 'Enter quantity',
+              hintStyle: TextStyle(color: context.appTextTertiary, fontSize: 14),
               helperText: 'Unit: ${widget.product.unit}',
+              helperStyle: TextStyle(color: context.appTextSecondary, fontSize: 11),
               filled: true,
               fillColor: context.appInputFill,
               border: OutlineInputBorder(
@@ -1131,17 +1134,17 @@ class _QuickSellSheetState extends State<_QuickSellSheet> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('Unit Price', style: AppTypography.bodyMedium),
+                    Text('Unit Price', style: AppTypography.bodyMedium.copyWith(color: AppColors.textPrimary)),
                     Text(Formatters.currency(widget.product.sellingPrice),
-                        style: AppTypography.labelMedium),
+                        style: AppTypography.labelMedium.copyWith(color: AppColors.textPrimary)),
                   ],
                 ),
                 const SizedBox(height: 6),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('Quantity', style: AppTypography.bodyMedium),
-                    Text('×$_quantity', style: AppTypography.labelMedium),
+                    Text('Quantity', style: AppTypography.bodyMedium.copyWith(color: AppColors.textPrimary)),
+                    Text('×$_quantity', style: AppTypography.labelMedium.copyWith(color: AppColors.textPrimary)),
                   ],
                 ),
                 const Divider(height: 20),
