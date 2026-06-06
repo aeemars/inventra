@@ -196,11 +196,24 @@ class InventoryController extends StateNotifier<InventoryState> {
     }
   }
 
-  Future<bool> adjustStock(String productId, int change) async {
+  Future<bool> adjustStock(String productId, int change, {String productName = ''}) async {
     if (_shopId == null) return false;
     state = state.copyWith(isLoading: true, error: null);
     try {
-      await _repository.updateStock(_shopId!, productId, change);
+      final userId = _ref.read(currentUserProvider)?.uid ?? '';
+      if (change > 0) {
+        // Restock — use the method that writes a stock_movements record
+        await _repository.restockWithRecord(
+          shopId: _shopId!,
+          productId: productId,
+          productName: productName,
+          quantity: change,
+          userId: userId,
+        );
+      } else {
+        // Negative adjustment — plain stock update (no sale record)
+        await _repository.updateStock(_shopId!, productId, change);
+      }
       state = state.copyWith(isLoading: false, isSuccess: true);
       return true;
     } catch (e) {

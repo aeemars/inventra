@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -38,12 +39,14 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
 
   int _quantity = 1;
   Product? _existingProduct;
+  Timer? _upcDebounce;
+  String? _dismissedBarcode;
   bool _masterDataExpanded = false;
 
   bool get isEditing => widget.productId != null;
 
   bool get _isScannedExistingProduct =>
-      !isEditing && widget.initialBarcode != null && _existingProduct != null;
+      !isEditing && _existingProduct != null;
 
   String get _displayProductName => _isScannedExistingProduct
       ? _existingProduct!.name
@@ -59,6 +62,15 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
     if (mounted) setState(() {});
   }
 
+  void _onUpcFieldChanged() {
+    _upcDebounce?.cancel();
+    final text = _upcController.text.trim();
+    if (text.length < 3) return; // don't search on very short input
+    _upcDebounce = Timer(const Duration(milliseconds: 700), () {
+      if (mounted) _lookupBarcode(text);
+    });
+  }
+
   @override
   void initState() {
     super.initState();
@@ -66,6 +78,10 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
       _barcodeController.text = widget.initialBarcode!;
       _upcController.text = widget.initialBarcode!;
       _lookupBarcode(widget.initialBarcode!);
+    }
+    // Only activate for new products not coming from scanner
+    if (!isEditing && widget.initialBarcode == null) {
+      _upcController.addListener(_onUpcFieldChanged);
     }
     if (isEditing) {
       _loadProduct();
@@ -77,6 +93,7 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
 
   /// Look up an existing product by barcode and pre-populate fields if found.
   Future<void> _lookupBarcode(String barcode) async {
+    if (barcode == _dismissedBarcode) return;
     final shopId = ref.read(currentShopIdProvider);
     if (shopId == null) return;
 
@@ -97,6 +114,44 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
         _categoryController.text = product.categoryId ?? '';
         _expiryController.text = _formatDateForInput(product.expiryDate);
       });
+
+      if (!isEditing && widget.initialBarcode == null && mounted) {
+        await showDialog<void>(
+          context: context,
+          barrierDismissible: false,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Product already exists'),
+            content: Text(
+              '"${product.name}" is already in your inventory with '
+              '${product.quantity} ${product.unit} in stock.\n\n'
+              'How many units would you like to add?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  // Dismiss and clear UPC to let user proceed as new product
+                  setState(() {
+                    _existingProduct = null;
+                    _dismissedBarcode = barcode;
+                  });
+                  Navigator.pop(ctx);
+                },
+                child: const Text('Create new anyway'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  // Pre-populate name from existing product and switch to restock mode
+                  _nameController.text = product.name;
+                  setState(() {}); // rebuild to reflect _existingProduct
+                },
+                child: const Text('Add units'),
+              ),
+            ],
+          ),
+        );
+        return;
+      }
     }
   }
 
@@ -129,6 +184,7 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
 
   @override
   void dispose() {
+    _upcDebounce?.cancel();
     _nameController.removeListener(_onHeaderFieldsChanged);
     _categoryController.removeListener(_onHeaderFieldsChanged);
     _upcController.removeListener(_onHeaderFieldsChanged);
@@ -225,7 +281,11 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
       if (_isScannedExistingProduct) {
         success = await ref
             .read(inventoryControllerProvider.notifier)
-            .adjustStock(_existingProduct!.id, _quantity);
+            .adjustStock(
+              _existingProduct!.id,
+              _quantity,
+              productName: _existingProduct!.name,
+            );
       } else {
         success = await ref
             .read(inventoryControllerProvider.notifier)

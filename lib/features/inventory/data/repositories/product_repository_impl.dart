@@ -89,10 +89,32 @@ class ProductRepositoryImpl implements ProductRepository {
 
   @override
   Future<Product> addProduct(String shopId, Product product) async {
+    final batch = _firestore.batch();
+
     final docRef = _firestore.collection(FirestorePaths.products(shopId)).doc();
     final newProduct = product.copyWith(id: docRef.id);
-    final model = ProductModel.fromEntity(newProduct);
-    await docRef.set(model.toFirestore());
+    batch.set(docRef, ProductModel.fromEntity(newProduct).toFirestore());
+
+    if (product.quantity > 0) {
+      final movementRef = _firestore
+          .collection(FirestorePaths.stockMovements(shopId))
+          .doc();
+      batch.set(movementRef, {
+        'productId': docRef.id,
+        'productName': product.name,
+        'type': 'intake',
+        'quantityChange': product.quantity,
+        'quantityBefore': 0,
+        'quantityAfter': product.quantity,
+        'reason': 'Initial stock',
+        'userId': product.createdBy,
+        'userName': '',
+        'source': 'manual',
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    }
+
+    await batch.commit();
     return newProduct;
   }
 
@@ -135,6 +157,46 @@ class ProductRepositoryImpl implements ProductRepository {
       transaction.update(docRef, {
         'quantity': newQty,
         'updatedAt': FieldValue.serverTimestamp(),
+      });
+    });
+  }
+
+  @override
+  Future<void> restockWithRecord({
+    required String shopId,
+    required String productId,
+    required String productName,
+    required int quantity,
+    required String userId,
+  }) async {
+    final productRef = _firestore
+        .collection(FirestorePaths.products(shopId))
+        .doc(productId);
+    final movementRef = _firestore
+        .collection(FirestorePaths.stockMovements(shopId))
+        .doc();
+
+    await _firestore.runTransaction((txn) async {
+      final snapshot = await txn.get(productRef);
+      if (!snapshot.exists) throw Exception('Product not found');
+
+      final currentQty = (snapshot.data()!['quantity'] as num).toInt();
+      final newQty = currentQty + quantity;
+      final now = FieldValue.serverTimestamp();
+
+      txn.update(productRef, {'quantity': newQty, 'updatedAt': now});
+      txn.set(movementRef, {
+        'productId': productId,
+        'productName': productName,
+        'type': 'intake',
+        'quantityChange': quantity,
+        'quantityBefore': currentQty,
+        'quantityAfter': newQty,
+        'reason': 'Manual restock',
+        'userId': userId,
+        'userName': '',
+        'source': 'manual',
+        'createdAt': now,
       });
     });
   }

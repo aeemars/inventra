@@ -24,6 +24,15 @@ abstract class ProductRepository {
   /// Update stock quantity atomically
   Future<void> updateStock(String shopId, String productId, int quantityChange);
 
+  /// Restock product with audit movement record
+  Future<void> restockWithRecord({
+    required String shopId,
+    required String productId,
+    required String productName,
+    required int quantity,
+    required String userId,
+  });
+
   /// Search products
   Future<List<Product>> searchProducts(String shopId, String query);
 

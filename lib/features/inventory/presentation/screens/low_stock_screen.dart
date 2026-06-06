@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_sizes.dart';
 import '../../../../core/constants/app_typography.dart';
@@ -90,7 +89,7 @@ class LowStockScreen extends ConsumerWidget {
 
                       return AppCard(
                         onTap: () =>
-                            context.push('/inventory/${product.id}/edit'),
+                            _showProductDetailSheet(context, product),
                         child: Row(
                           children: [
                             Container(
@@ -160,6 +159,135 @@ class LowStockScreen extends ConsumerWidget {
                       );
                     },
                   ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+void _showProductDetailSheet(BuildContext context, dynamic product) {
+  showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (_) => DraggableScrollableSheet(
+      initialChildSize: 0.6,
+      minChildSize: 0.4,
+      maxChildSize: 0.92,
+      expand: false,
+      builder: (_, scrollController) => Container(
+        decoration: BoxDecoration(
+          color: Theme.of(context).scaffoldBackgroundColor,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: ListView(
+          controller: scrollController,
+          padding: const EdgeInsets.fromLTRB(
+            AppSizes.screenPaddingH, AppSizes.lg,
+            AppSizes.screenPaddingH, AppSizes.xxl,
+          ),
+          children: [
+            // drag handle
+            Center(
+              child: Container(
+                width: 40, height: 4,
+                margin: const EdgeInsets.only(bottom: AppSizes.lg),
+                decoration: BoxDecoration(
+                  color: AppColors.cardBorder,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            // Status badge
+            Row(
+              children: [
+                Expanded(
+                  child: Text(product.name, style: AppTypography.h3),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: product.isOutOfStock
+                        ? AppColors.error
+                        : product.isLowStock
+                            ? AppColors.warning
+                            : AppColors.success,
+                    borderRadius: BorderRadius.circular(AppSizes.radiusFull),
+                  ),
+                  child: Text(
+                    product.isOutOfStock
+                        ? 'Out of Stock'
+                        : product.isLowStock ? 'Low Stock' : 'In Stock',
+                    style: AppTypography.labelSmall.copyWith(color: AppColors.white),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSizes.md),
+            _DetailRow(label: 'SKU', value: product.sku),
+            if (product.barcode != null)
+              _DetailRow(label: 'Barcode', value: product.barcode!),
+            _DetailRow(
+              label: 'Category',
+              value: product.categoryName ?? 'Uncategorized',
+            ),
+            _DetailRow(
+              label: 'Selling Price',
+              value: Formatters.currency(product.sellingPrice),
+            ),
+            _DetailRow(
+              label: 'Cost Price',
+              value: Formatters.currency(product.costPrice),
+            ),
+            _DetailRow(
+              label: 'Stock',
+              value: '${product.quantity} ${product.unit}',
+            ),
+            _DetailRow(
+              label: 'Reorder Level',
+              value: '${product.reorderLevel} ${product.unit}',
+            ),
+            if (product.supplier != null)
+              _DetailRow(label: 'Supplier', value: product.supplier!),
+            if (product.expiryDate != null)
+              _DetailRow(
+                label: 'Expiry',
+                value: Formatters.date(product.expiryDate!),
+              ),
+            if (product.description != null)
+              _DetailRow(label: 'Description', value: product.description!),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+// reusable row for the detail sheet
+class _DetailRow extends StatelessWidget {
+  final String label;
+  final String value;
+  const _DetailRow({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 120,
+            child: Text(
+              label,
+              style: AppTypography.bodySmall.copyWith(
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(value, style: AppTypography.bodyMedium),
           ),
         ],
       ),
