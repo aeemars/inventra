@@ -88,7 +88,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               ),
               const SizedBox(height: 16),
               Text('Update Profile Photo',
-                  style: AppTypography.h3),
+                  style: AppTypography.h3.copyWith(color: context.appTextPrimary)),
               const SizedBox(height: 16),
               ListTile(
                 leading: Container(

@@ -111,7 +111,7 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
         _unitController.text = product.unit;
         _supplierController.text = product.supplier ?? '';
         _descriptionController.text = product.description ?? '';
-        _categoryController.text = product.categoryId ?? '';
+        _categoryController.text = product.categoryName ?? product.categoryId ?? '';
         _expiryController.text = _formatDateForInput(product.expiryDate);
       });
 
@@ -176,7 +176,7 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
         _unitController.text = product.unit;
         _supplierController.text = product.supplier ?? '';
         _descriptionController.text = product.description ?? '';
-        _categoryController.text = product.categoryId ?? '';
+        _categoryController.text = product.categoryName ?? product.categoryId ?? '';
         _expiryController.text = _formatDateForInput(product.expiryDate);
       });
     }
@@ -255,6 +255,9 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
           ? null
           : _barcodeController.text.trim(),
       categoryId: _categoryController.text.trim().isEmpty
+          ? null
+          : _categoryController.text.trim(),
+      categoryName: _categoryController.text.trim().isEmpty
           ? null
           : _categoryController.text.trim(),
       costPrice: double.tryParse(_costPriceController.text) ?? 0,

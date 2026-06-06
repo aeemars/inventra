@@ -130,10 +130,16 @@ class InventoryListScreen extends ConsumerWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Filter & Sort', style: AppTypography.h4),
+              Text(
+                'Filter & Sort',
+                style: AppTypography.h4.copyWith(color: context.appTextPrimary),
+              ),
               const SizedBox(height: AppSizes.xl),
               // Category filter chips would go here
-              Text('Sort By', style: AppTypography.labelLarge),
+              Text(
+                'Sort By',
+                style: AppTypography.labelLarge.copyWith(color: context.appTextPrimary),
+              ),
               const SizedBox(height: AppSizes.md),
               Wrap(
                 spacing: 8,
@@ -304,7 +310,7 @@ void _showProductDetailSheet(BuildContext context, dynamic product) {
                 width: 40, height: 4,
                 margin: const EdgeInsets.only(bottom: AppSizes.lg),
                 decoration: BoxDecoration(
-                  color: AppColors.cardBorder,
+                  color: context.appDivider,
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -313,7 +319,10 @@ void _showProductDetailSheet(BuildContext context, dynamic product) {
             Row(
               children: [
                 Expanded(
-                  child: Text(product.name, style: AppTypography.h3),
+                  child: Text(
+                    product.name,
+                    style: AppTypography.h3.copyWith(color: context.appTextPrimary),
+                  ),
                 ),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -336,8 +345,6 @@ void _showProductDetailSheet(BuildContext context, dynamic product) {
             ),
             const SizedBox(height: AppSizes.md),
             _DetailRow(label: 'SKU', value: product.sku),
-            if (product.barcode != null)
-              _DetailRow(label: 'Barcode', value: product.barcode!),
             _DetailRow(
               label: 'Category',
               value: product.categoryName ?? 'Uncategorized',
@@ -392,12 +399,17 @@ class _DetailRow extends StatelessWidget {
             child: Text(
               label,
               style: AppTypography.bodySmall.copyWith(
-                color: AppColors.textSecondary,
+                color: context.appTextSecondary,
               ),
             ),
           ),
           Expanded(
-            child: Text(value, style: AppTypography.bodyMedium),
+            child: Text(
+              value,
+              style: AppTypography.bodyMedium.copyWith(
+                color: context.appTextPrimary,
+              ),
+            ),
           ),
         ],
       ),
