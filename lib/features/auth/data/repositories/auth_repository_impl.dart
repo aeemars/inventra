@@ -72,17 +72,46 @@ class AuthRepositoryImpl implements AuthRepository {
     required UserRole role,
   }) async {
     try {
-      final credential = await _auth.createUserWithEmailAndPassword(
-        email: email.trim(),
-        password: password,
-      );
+      late final String uid;
 
-      await credential.user!.updateDisplayName(displayName);
+      try {
+        final credential = await _auth.createUserWithEmailAndPassword(
+          email: email.trim(),
+          password: password,
+        );
+        await credential.user!.updateDisplayName(displayName);
+        uid = credential.user!.uid;
+      } on FirebaseAuthException catch (e) {
+        if (e.code == 'email-already-in-use') {
+          // Auth record exists (e.g. Firestore profile was deleted manually).
+          // Sign in with the existing account and re-create the profile below.
+          final credential = await _auth.signInWithEmailAndPassword(
+            email: email.trim(),
+            password: password,
+          );
+          await credential.user!.updateDisplayName(displayName);
+          uid = credential.user!.uid;
+        } else {
+          rethrow;
+        }
+      }
 
       final now = DateTime.now();
-      final uid = credential.user!.uid;
 
-      // Create shop document for admin registrations
+      // Check if the Firestore profile already exists — skip recreation if so
+      final existingDoc = await _firestore
+          .collection(FirestorePaths.users)
+          .doc(uid)
+          .get();
+
+      if (existingDoc.exists) {
+        // Profile exists; just fetch and return
+        final user = UserModel.fromFirestore(existingDoc).toEntity();
+        _cachedUser = user;
+        return user;
+      }
+
+      // Profile is missing — re-create it (and shop if admin)
       String? shopId;
       if (role == UserRole.admin && shopName.trim().isNotEmpty) {
         final shopRef = _firestore.collection(FirestorePaths.shops).doc();
