@@ -62,6 +62,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
 
     ref.listen(authControllerProvider, (_, state) {
       if (state.error != null) {
+        ScaffoldMessenger.of(context).clearSnackBars();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(state.error!),

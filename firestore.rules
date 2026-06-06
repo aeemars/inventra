@@ -135,7 +135,9 @@ service cloud.firestore {
       // ── Settings ──
       match /settings/{docId} {
         allow read: if isShopMember(shopId);
-        allow write: if isShopAdmin(shopId);
+        allow create: if isAuthenticated() && (isShopAdmin(shopId) || request.resource.data.updatedBy == request.auth.uid);
+        allow update: if isShopAdmin(shopId);
+        allow delete: if false;
       }
     }
   }

@@ -56,10 +56,8 @@ class AuthRepositoryImpl implements AuthRepository {
       final user = await _fetchUserProfile(credential.user!.uid);
       _cachedUser = user;
       return user;
-    } on FirebaseAuthException catch (e) {
-      throw AuthFailure.fromCode(e.code);
     } catch (e) {
-      throw AuthFailure(message: e.toString());
+      throw _handleException(e);
     }
   }
 
@@ -217,10 +215,8 @@ class AuthRepositoryImpl implements AuthRepository {
       );
       _cachedUser = user;
       return user;
-    } on FirebaseAuthException catch (e) {
-      throw AuthFailure.fromCode(e.code);
     } catch (e) {
-      throw AuthFailure(message: e.toString());
+      throw _handleException(e);
     }
   }
 
@@ -324,5 +320,27 @@ class AuthRepositoryImpl implements AuthRepository {
     }
 
     return UserModel.fromFirestore(doc).toEntity();
+  }
+
+  AuthFailure _handleException(dynamic e) {
+    if (e is AuthFailure) {
+      return e;
+    }
+    if (e is FirebaseAuthException) {
+      return AuthFailure.fromCode(e.code);
+    }
+    if (e is FirebaseException) {
+      if (e.code == 'permission-denied') {
+        return const AuthFailure(
+          message: 'Access denied: Insufficient permissions to perform database operation.',
+          code: 'permission-denied',
+        );
+      }
+      return AuthFailure(
+        message: e.message ?? 'A database error occurred. Please try again.',
+        code: e.code,
+      );
+    }
+    return AuthFailure(message: e.toString());
   }
 }
