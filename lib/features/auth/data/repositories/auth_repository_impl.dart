@@ -84,13 +84,30 @@ class AuthRepositoryImpl implements AuthRepository {
       } on FirebaseAuthException catch (e) {
         if (e.code == 'email-already-in-use') {
           // Auth record exists (e.g. Firestore profile was deleted manually).
-          // Sign in with the existing account and re-create the profile below.
-          final credential = await _auth.signInWithEmailAndPassword(
-            email: email.trim(),
-            password: password,
-          );
-          await credential.user!.updateDisplayName(displayName);
-          uid = credential.user!.uid;
+          // Try signing in with the given password to reclaim the account.
+          try {
+            final credential = await _auth.signInWithEmailAndPassword(
+              email: email.trim(),
+              password: password,
+            );
+            await credential.user!.updateDisplayName(displayName);
+            uid = credential.user!.uid;
+          } on FirebaseAuthException catch (signInError) {
+            // Password doesn't match the existing Auth record
+            if (signInError.code == 'wrong-password' ||
+                signInError.code == 'invalid-credential') {
+              throw const AuthFailure(
+                message:
+                    'An account with this email already exists. '
+                    'Please sign in instead, or use "Forgot Password" to reset it.',
+                code: 'email-already-in-use',
+              );
+            }
+            throw AuthFailure(
+              message: 'Unable to access existing account: ${signInError.message ?? signInError.code}',
+              code: signInError.code,
+            );
+          }
         } else {
           rethrow;
         }
