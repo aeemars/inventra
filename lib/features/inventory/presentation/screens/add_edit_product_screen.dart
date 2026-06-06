@@ -38,6 +38,7 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
 
   int _quantity = 1;
   Product? _existingProduct;
+  bool _masterDataExpanded = false;
 
   bool get isEditing => widget.productId != null;
 
@@ -64,6 +65,7 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
     if (!isEditing && widget.initialBarcode != null) {
       _barcodeController.text = widget.initialBarcode!;
       _upcController.text = widget.initialBarcode!;
+      _lookupBarcode(widget.initialBarcode!);
     }
     if (isEditing) {
       _loadProduct();
@@ -71,6 +73,31 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
     _nameController.addListener(_onHeaderFieldsChanged);
     _categoryController.addListener(_onHeaderFieldsChanged);
     _upcController.addListener(_onHeaderFieldsChanged);
+  }
+
+  /// Look up an existing product by barcode and pre-populate fields if found.
+  Future<void> _lookupBarcode(String barcode) async {
+    final shopId = ref.read(currentShopIdProvider);
+    if (shopId == null) return;
+
+    final product = await ref
+        .read(productRepositoryProvider)
+        .findByBarcode(shopId, barcode);
+
+    if (product != null && mounted) {
+      setState(() {
+        _existingProduct = product;
+        _nameController.text = product.name;
+        _costPriceController.text = product.costPrice.toString();
+        _sellingPriceController.text = product.sellingPrice.toString();
+        _reorderLevelController.text = product.reorderLevel.toString();
+        _unitController.text = product.unit;
+        _supplierController.text = product.supplier ?? '';
+        _descriptionController.text = product.description ?? '';
+        _categoryController.text = product.categoryId ?? '';
+        _expiryController.text = _formatDateForInput(product.expiryDate);
+      });
+    }
   }
 
   Future<void> _loadProduct() async {
@@ -121,7 +148,19 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
   }
 
   Future<void> _onSave() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (!_formKey.currentState!.validate()) {
+      // If Name (inside collapsed Master Data) is empty, expand the tile
+      if (_nameController.text.trim().isEmpty && !_masterDataExpanded) {
+        setState(() => _masterDataExpanded = true);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Please fill in the required product name'),
+            backgroundColor: Colors.orange.shade700,
+          ),
+        );
+      }
+      return;
+    }
 
     final now = DateTime.now();
     final userId = ref.read(currentUserProvider)?.uid ?? '';
@@ -155,10 +194,17 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
     );
 
     bool success;
-    if (isEditing) {
-      success = await ref
-          .read(inventoryControllerProvider.notifier)
-          .updateProduct(product);
+    if (isEditing || _isScannedExistingProduct) {
+      // For scanned existing products, update stock rather than creating a duplicate
+      if (_isScannedExistingProduct) {
+        success = await ref
+            .read(inventoryControllerProvider.notifier)
+            .adjustStock(_existingProduct!.id, _quantity);
+      } else {
+        success = await ref
+            .read(inventoryControllerProvider.notifier)
+            .updateProduct(product);
+      }
     } else {
       final result = await ref
           .read(inventoryControllerProvider.notifier)
@@ -250,7 +296,7 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
           Positioned.fill(
             child: SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(AppSizes.screenPaddingH,
-                  AppSizes.md, AppSizes.screenPaddingH, 140),
+                  AppSizes.md, AppSizes.screenPaddingH, 110),
               child: Form(
                 key: _formKey,
                 child: Column(
@@ -433,6 +479,10 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
                         tilePadding: EdgeInsets.zero,
                         iconColor: context.appTextPrimary,
                         collapsedIconColor: context.appTextPrimary,
+                        initiallyExpanded: _masterDataExpanded,
+                        onExpansionChanged: (expanded) {
+                          _masterDataExpanded = expanded;
+                        },
                         title: Text('Master Data (Edit Product Info)',
                             style: TextStyle(
                                 fontWeight: FontWeight.w600, fontSize: 14, color: context.appTextPrimary)),
@@ -480,11 +530,11 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
             bottom: 0,
             child: Container(
               padding: EdgeInsets.fromLTRB(
-                  24, 20, 24, MediaQuery.of(context).padding.bottom + 16),
+                  20, 12, 20, MediaQuery.of(context).padding.bottom + 8),
               decoration: BoxDecoration(
                 color: context.appSurfaceRaised,
                 borderRadius:
-                    const BorderRadius.vertical(top: Radius.circular(24)),
+                    const BorderRadius.vertical(top: Radius.circular(20)),
                 boxShadow: [
                   BoxShadow(
                       color: Colors.black.withAlpha(13),
@@ -500,16 +550,16 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
                     children: [
                       Text('Total items adding:',
                           style:
-                              TextStyle(color: context.appTextSecondary, fontSize: 14)),
+                              TextStyle(color: context.appTextSecondary, fontSize: 13)),
                       Text('$_quantity Unit${_quantity > 1 ? 's' : ''}',
                           style: TextStyle(
-                              fontWeight: FontWeight.w700, fontSize: 16, color: context.appTextPrimary)),
+                              fontWeight: FontWeight.w700, fontSize: 15, color: context.appTextPrimary)),
                     ],
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 10),
                   SizedBox(
                     width: double.infinity,
-                    height: 52,
+                    height: 48,
                     child: ElevatedButton.icon(
                       onPressed: controllerState.isLoading ? null : _onSave,
                       style: ElevatedButton.styleFrom(
@@ -521,20 +571,19 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
                       ),
                       icon: controllerState.isLoading
                           ? const SizedBox(
-                              width: 20,
-                              height: 20,
+                              width: 18,
+                              height: 18,
                               child: CircularProgressIndicator(
                                   color: Colors.white, strokeWidth: 2))
-                          : const Icon(Icons.check_rounded, size: 20),
-                      label: const Text('Confirm Addition',
-                          style: TextStyle(
-                              fontSize: 16, fontWeight: FontWeight.w600)),
+                          : const Icon(Icons.check_rounded, size: 18),
+                      label: Text(
+                          _isScannedExistingProduct
+                              ? 'Confirm Restock'
+                              : 'Confirm Addition',
+                          style: const TextStyle(
+                              fontSize: 15, fontWeight: FontWeight.w600)),
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  Text(
-                      'This action will update the Central Database instantly.',
-                      style: TextStyle(color: context.appTextTertiary, fontSize: 11)),
                 ],
               ),
             ),
