@@ -163,8 +163,31 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
       return;
     }
 
-    final now = DateTime.now();
+    // ── Pre-flight guards ──
+    final shopId = ref.read(currentShopIdProvider);
+    if (shopId == null || shopId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Your account has no shop linked. Please re-login or contact support.'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
+
     final userId = ref.read(currentUserProvider)?.uid ?? '';
+    if (userId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Session expired. Please sign in again.'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
+    // ── end guards ──
+
+    final now = DateTime.now();
 
     final product = Product(
       id: _existingProduct?.id ?? '',
@@ -222,7 +245,7 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
           backgroundColor: AppColors.success,
         ),
       );
-      context.pop();
+      context.go('/inventory');
     }
   }
 

@@ -9,6 +9,7 @@ import '../../../../core/widgets/app_card.dart';
 import '../../../../core/widgets/app_text_field.dart';
 import '../../../../core/widgets/empty_state.dart';
 import '../../../../core/extensions/theme_ext.dart';
+import '../../../../core/router/scanner_route_access.dart';
 import '../controllers/inventory_controller.dart';
 
 /// Inventory list screen with search, filter, sort
@@ -96,12 +97,25 @@ class InventoryListScreen extends ConsumerWidget {
                       final product = products[index];
                       return _ProductListTile(
                         product: product,
-                        onTap: () => context.push('/inventory/${product.id}'),
+                        onTap: () => context.push('/inventory/${product.id}/edit'),
                       );
                     },
                   ),
           ),
         ],
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () {
+          ref
+              .read(scannerRouteAccessProvider.notifier)
+              .grant(ScannerProtectedRoute.addProduct);
+          context.push('/inventory/add');
+        },
+        backgroundColor: AppColors.primary,
+        foregroundColor: AppColors.white,
+        icon: const Icon(Icons.add_rounded),
+        label: const Text('Add Product',
+            style: TextStyle(fontWeight: FontWeight.w600)),
       ),
     );
   }
