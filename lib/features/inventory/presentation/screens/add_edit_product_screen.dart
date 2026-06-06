@@ -149,12 +149,13 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
 
   Future<void> _onSave() async {
     if (!_formKey.currentState!.validate()) {
-      // If Name (inside collapsed Master Data) is empty, expand the tile
-      if (_nameController.text.trim().isEmpty && !_masterDataExpanded) {
+      if (!_masterDataExpanded) {
         setState(() => _masterDataExpanded = true);
+      }
+      if (_nameController.text.trim().isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text('Please fill in the required product name'),
+            content: const Text('Product name is required — expand "Master Data" to fill it in'),
             backgroundColor: Colors.orange.shade700,
           ),
         );
@@ -168,7 +169,9 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
     final product = Product(
       id: _existingProduct?.id ?? '',
       name: _nameController.text.trim(),
-      sku: _upcController.text.trim(),
+      sku: _upcController.text.trim().isNotEmpty
+          ? _upcController.text.trim()
+          : 'INV-${DateTime.now().millisecondsSinceEpoch}',
       barcode: _barcodeController.text.trim().isEmpty
           ? null
           : _barcodeController.text.trim(),
@@ -256,6 +259,17 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
   @override
   Widget build(BuildContext context) {
     final controllerState = ref.watch(inventoryControllerProvider);
+
+    ref.listen<InventoryState>(inventoryControllerProvider, (_, state) {
+      if (state.error != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(state.error!),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    });
 
     return Scaffold(
       backgroundColor: context.appBackground,
@@ -495,9 +509,8 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
                           const SizedBox(height: AppSizes.md),
                           _buildWireframeInput(
                               label: 'UPC',
-                              hint: 'UPC',
-                              controller: _upcController,
-                              isRequired: true),
+                              hint: 'Auto-generated if left blank',
+                              controller: _upcController),
                           const SizedBox(height: AppSizes.md),
                           Row(
                             children: [
