@@ -412,7 +412,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       user?.displayName.isNotEmpty == true
                           ? user!.displayName
                           : 'User',
-                      style: AppTypography.h2,
+                      style: AppTypography.h2.copyWith(
+                        color: context.appTextPrimary,
+                      ),
                     ),
                     const SizedBox(height: AppSizes.sm),
 
