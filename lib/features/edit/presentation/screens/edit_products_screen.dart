@@ -120,7 +120,9 @@ class _EditProductsScreenState extends ConsumerState<EditProductsScreen> {
                 if (!mounted) return;
 
                 if (success) {
-                  Navigator.of(context).pop();
+                  if (ctx.mounted) {
+                    Navigator.pop(ctx);
+                  }
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
                       content: Text('Product updated.'),
@@ -316,9 +318,9 @@ class _EditProductsScreenState extends ConsumerState<EditProductsScreen> {
                       final product = activeProducts[index];
                       return Container(
                         decoration: BoxDecoration(
-                          color: Colors.white,
+                          color: context.appSurface,
                           borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: Colors.grey.shade200),
+                          border: Border.all(color: context.appCardBorder),
                         ),
                         child: ListTile(
                           contentPadding: const EdgeInsets.symmetric(
@@ -327,16 +329,23 @@ class _EditProductsScreenState extends ConsumerState<EditProductsScreen> {
                           ),
                           title: Text(
                             product.name,
-                            style: const TextStyle(fontWeight: FontWeight.w600),
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              color: context.appTextPrimary,
+                            ),
                           ),
                           subtitle: Padding(
                             padding: const EdgeInsets.only(top: 6),
                             child: Text(
                               'Price: ₦${product.sellingPrice.toStringAsFixed(2)}\n'
                               'Expiry: ${_formatDate(product.expiryDate).isEmpty ? 'Not set' : _formatDate(product.expiryDate)}',
+                              style: TextStyle(
+                                color: context.appTextSecondary,
+                              ),
                             ),
                           ),
                           trailing: PopupMenuButton<String>(
+                            iconColor: context.appTextPrimary,
                             onSelected: (value) {
                               if (value == 'quick') {
                                 _showQuickEditDialog(product);
