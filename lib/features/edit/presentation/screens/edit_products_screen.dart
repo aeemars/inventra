@@ -40,113 +40,10 @@ class _EditProductsScreenState extends ConsumerState<EditProductsScreen> {
   }
 
   Future<void> _showQuickEditDialog(Product product) async {
-    final priceController = TextEditingController(
-      text: product.sellingPrice.toStringAsFixed(2),
-    );
-    final expiryController = TextEditingController(
-      text: _formatDate(product.expiryDate),
-    );
-
     await showDialog<void>(
       context: context,
-      builder: (ctx) {
-        return AlertDialog(
-          title: Text('Edit ${product.name}'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: priceController,
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
-                decoration: const InputDecoration(
-                  labelText: 'Selling Price',
-                  hintText: 'e.g. 12.99',
-                  prefixText: '₦ ',
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: expiryController,
-                decoration: const InputDecoration(
-                  labelText: 'Expiry Date',
-                  hintText: 'mm/dd/yyyy (optional)',
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                final newPrice = double.tryParse(priceController.text.trim());
-                if (newPrice == null || newPrice < 0) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Enter a valid price.'),
-                      backgroundColor: AppColors.error,
-                    ),
-                  );
-                  return;
-                }
-
-                final parsedExpiry = _parseDate(expiryController.text);
-                if (expiryController.text.trim().isNotEmpty &&
-                    parsedExpiry == null) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Use date format mm/dd/yyyy.'),
-                      backgroundColor: AppColors.error,
-                    ),
-                  );
-                  return;
-                }
-
-                final userId = ref.read(currentUserProvider)?.uid ?? '';
-                final updated = product.copyWith(
-                  sellingPrice: newPrice,
-                  expiryDate: parsedExpiry,
-                  updatedAt: DateTime.now(),
-                  updatedBy: userId,
-                );
-
-                final success = await ref
-                    .read(inventoryControllerProvider.notifier)
-                    .updateProduct(updated);
-
-                if (!mounted) return;
-
-                if (success) {
-                  if (ctx.mounted) {
-                    Navigator.pop(ctx);
-                  }
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Product updated.'),
-                      backgroundColor: AppColors.success,
-                    ),
-                  );
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Failed to update product.'),
-                      backgroundColor: AppColors.error,
-                    ),
-                  );
-                }
-              },
-              child: const Text('Save'),
-            ),
-          ],
-        );
-      },
+      builder: (_) => _QuickEditDialog(product: product),
     );
-
-    priceController.dispose();
-    expiryController.dispose();
   }
 
   String _formatDate(DateTime? date) {
@@ -154,23 +51,6 @@ class _EditProductsScreenState extends ConsumerState<EditProductsScreen> {
     final mm = date.month.toString().padLeft(2, '0');
     final dd = date.day.toString().padLeft(2, '0');
     return '$mm/$dd/${date.year}';
-  }
-
-  DateTime? _parseDate(String input) {
-    final text = input.trim();
-    if (text.isEmpty) return null;
-
-    final match = RegExp(r'^(\d{1,2})/(\d{1,2})/(\d{4})$').firstMatch(text);
-    if (match == null) return null;
-
-    final month = int.tryParse(match.group(1)!);
-    final day = int.tryParse(match.group(2)!);
-    final year = int.tryParse(match.group(3)!);
-
-    if (month == null || day == null || year == null) return null;
-    if (month < 1 || month > 12 || day < 1 || day > 31) return null;
-
-    return DateTime(year, month, day);
   }
 
   Future<void> _scanBarcodeForSearch() async {
@@ -466,5 +346,174 @@ class _BarcodeSearchScannerScreenState
         ],
       ),
     );
+  }
+}
+
+class _QuickEditDialog extends ConsumerStatefulWidget {
+  final Product product;
+
+  const _QuickEditDialog({
+    required this.product,
+  });
+
+  @override
+  ConsumerState<_QuickEditDialog> createState() => _QuickEditDialogState();
+}
+
+class _QuickEditDialogState extends ConsumerState<_QuickEditDialog> {
+  late final TextEditingController _priceController;
+  late final TextEditingController _expiryController;
+  bool _isSaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _priceController = TextEditingController(
+      text: widget.product.sellingPrice.toStringAsFixed(2),
+    );
+    _expiryController = TextEditingController(
+      text: _formatDate(widget.product.expiryDate),
+    );
+  }
+
+  @override
+  void dispose() {
+    _priceController.dispose();
+    _expiryController.dispose();
+    super.dispose();
+  }
+
+  String _formatDate(DateTime? date) {
+    if (date == null) return '';
+    final mm = date.month.toString().padLeft(2, '0');
+    final dd = date.day.toString().padLeft(2, '0');
+    return '$mm/$dd/${date.year}';
+  }
+
+  DateTime? _parseDate(String input) {
+    final text = input.trim();
+    if (text.isEmpty) return null;
+
+    final match = RegExp(r'^(\d{1,2})/(\d{1,2})/(\d{4})$').firstMatch(text);
+    if (match == null) return null;
+
+    final month = int.tryParse(match.group(1)!);
+    final day = int.tryParse(match.group(2)!);
+    final year = int.tryParse(match.group(3)!);
+
+    if (month == null || day == null || year == null) return null;
+    if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+
+    return DateTime(year, month, day);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text('Edit ${widget.product.name}'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: _priceController,
+            keyboardType:
+                const TextInputType.numberWithOptions(decimal: true),
+            decoration: const InputDecoration(
+              labelText: 'Selling Price',
+              hintText: 'e.g. 12.99',
+              prefixText: '₦ ',
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _expiryController,
+            decoration: const InputDecoration(
+              labelText: 'Expiry Date',
+              hintText: 'mm/dd/yyyy (optional)',
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: _isSaving ? null : () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: _isSaving ? null : _save,
+          child: _isSaving
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Save'),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _save() async {
+    final newPrice = double.tryParse(_priceController.text.trim());
+    if (newPrice == null || newPrice < 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Enter a valid price.'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
+
+    final parsedExpiry = _parseDate(_expiryController.text);
+    if (_expiryController.text.trim().isNotEmpty &&
+        parsedExpiry == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Use date format mm/dd/yyyy.'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isSaving = true);
+
+    try {
+      final userId = ref.read(currentUserProvider)?.uid ?? '';
+      final updated = widget.product.copyWith(
+        sellingPrice: newPrice,
+        expiryDate: parsedExpiry,
+        updatedAt: DateTime.now(),
+        updatedBy: userId,
+      );
+
+      final success = await ref
+          .read(inventoryControllerProvider.notifier)
+          .updateProduct(updated);
+
+      if (!mounted) return;
+
+      if (success) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Product updated.'),
+            backgroundColor: AppColors.success,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to update product.'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
+    }
   }
 }
