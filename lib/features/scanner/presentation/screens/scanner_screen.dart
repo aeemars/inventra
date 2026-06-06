@@ -959,229 +959,249 @@ class _QuickSellSheetState extends State<_QuickSellSheet> {
   @override
   Widget build(BuildContext context) {
     final total = widget.product.sellingPrice * _quantity;
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
 
     return Container(
-      padding: EdgeInsets.fromLTRB(AppSizes.xxl, AppSizes.xxl, AppSizes.xxl,
-          MediaQuery.of(context).padding.bottom + AppSizes.lg),
+      padding: EdgeInsets.fromLTRB(
+        AppSizes.xxl,
+        AppSizes.xxl,
+        AppSizes.xxl,
+        bottomInset + MediaQuery.of(context).padding.bottom + AppSizes.lg,
+      ),
       decoration: BoxDecoration(
         color: context.appSurfaceRaised,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 40,
-            height: 4,
-            decoration: BoxDecoration(
-              color: context.appDivider,
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          const SizedBox(height: AppSizes.xl),
-
-          // Header
-          Row(
-            children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: AppColors.coral.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(Icons.point_of_sale_rounded,
-                    color: AppColors.coral, size: 22),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: context.appDivider,
+                borderRadius: BorderRadius.circular(2),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('New Sale', style: AppTypography.h4.copyWith(color: context.appTextPrimary)),
-                    Text('Enter quantity to complete sale',
-                        style: AppTypography.bodySmall
-                            .copyWith(color: context.appTextSecondary)),
-                  ],
+            ),
+            const SizedBox(height: AppSizes.xl),
+
+            // Header
+            Row(
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: AppColors.coral.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.point_of_sale_rounded,
+                      color: AppColors.coral, size: 22),
                 ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('New Sale', style: AppTypography.h4.copyWith(color: context.appTextPrimary)),
+                      Text('Enter quantity to complete sale',
+                          style: AppTypography.bodySmall
+                              .copyWith(color: context.appTextSecondary)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSizes.lg),
+
+            // Product details required for operator confirmation
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: context.appInputFill,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Product Name',
+                      style: AppTypography.bodySmall
+                          .copyWith(color: context.appTextSecondary)),
+                  const SizedBox(height: 2),
+                  Text(widget.product.name, style: AppTypography.labelLarge.copyWith(color: context.appTextPrimary)),
+                  const SizedBox(height: 8),
+                  Text('Product ID',
+                      style: AppTypography.bodySmall
+                          .copyWith(color: context.appTextSecondary)),
+                  const SizedBox(height: 2),
+                  Text(widget.product.id, style: AppTypography.bodyMedium.copyWith(color: context.appTextPrimary)),
+                  const SizedBox(height: 8),
+                  Text('Selling Price',
+                      style: AppTypography.bodySmall
+                          .copyWith(color: context.appTextSecondary)),
+                  const SizedBox(height: 2),
+                  Text(Formatters.currency(widget.product.sellingPrice),
+                      style: AppTypography.labelLarge.copyWith(color: context.appTextPrimary)),
+                ],
+              ),
+            ),
+            const SizedBox(height: AppSizes.lg),
+
+            // Stock info
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              decoration: BoxDecoration(
+                color: context.appInputFill,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('Available Stock',
+                      style: AppTypography.bodyMedium
+                          .copyWith(color: context.appTextSecondary)),
+                  Text('${widget.product.quantity} ${widget.product.unit}',
+                      style: AppTypography.labelLarge.copyWith(color: context.appTextPrimary)),
+                ],
+              ),
+            ),
+            const SizedBox(height: AppSizes.lg),
+
+            // Quantity input
+            Text('Quantity', style: AppTypography.labelLarge.copyWith(color: context.appTextPrimary)),
+            const SizedBox(height: AppSizes.sm),
+            TextField(
+              controller: _quantityController,
+              keyboardType: TextInputType.number,
+              style: TextStyle(color: context.appTextPrimary, fontSize: 14),
+              onChanged: (_) => setState(() {}),
+              decoration: InputDecoration(
+                hintText: 'Enter quantity',
+                hintStyle: TextStyle(color: context.appTextTertiary, fontSize: 14),
+                helperText: 'Unit: ${widget.product.unit}',
+                helperStyle: TextStyle(color: context.appTextSecondary, fontSize: 11),
+                filled: true,
+                fillColor: context.appInputFill,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide.none,
+                ),
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              ),
+            ),
+
+            // Insufficient stock warning
+            if (_quantity <= 0 && _quantityController.text.trim().isNotEmpty) ...[
+              const SizedBox(height: AppSizes.sm),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.warning_rounded,
+                      color: AppColors.error, size: 14),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Enter a valid quantity',
+                    style:
+                        AppTypography.bodySmall.copyWith(color: AppColors.error),
+                  ),
+                ],
+              ),
+            ] else if (!_canSell && _quantity > 0) ...[
+              const SizedBox(height: AppSizes.sm),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.warning_rounded,
+                      color: AppColors.error, size: 14),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Exceeds available stock',
+                    style:
+                        AppTypography.bodySmall.copyWith(color: AppColors.error),
+                  ),
+                ],
               ),
             ],
-          ),
-          const SizedBox(height: AppSizes.lg),
 
-          // Product details required for operator confirmation
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: context.appInputFill,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Product Name',
-                    style: AppTypography.bodySmall
-                        .copyWith(color: context.appTextSecondary)),
-                const SizedBox(height: 2),
-                Text(widget.product.name, style: AppTypography.labelLarge.copyWith(color: context.appTextPrimary)),
-                const SizedBox(height: 8),
-                Text('Product ID',
-                    style: AppTypography.bodySmall
-                        .copyWith(color: context.appTextSecondary)),
-                const SizedBox(height: 2),
-                Text(widget.product.id, style: AppTypography.bodyMedium.copyWith(color: context.appTextPrimary)),
-                const SizedBox(height: 8),
-                Text('Selling Price',
-                    style: AppTypography.bodySmall
-                        .copyWith(color: context.appTextSecondary)),
-                const SizedBox(height: 2),
-                Text(Formatters.currency(widget.product.sellingPrice),
-                    style: AppTypography.labelLarge.copyWith(color: context.appTextPrimary)),
-              ],
-            ),
-          ),
-          const SizedBox(height: AppSizes.lg),
+            const SizedBox(height: AppSizes.xxl),
 
-          // Stock info
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            decoration: BoxDecoration(
-              color: context.appInputFill,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text('Available Stock',
-                    style: AppTypography.bodyMedium
-                        .copyWith(color: context.appTextSecondary)),
-                Text('${widget.product.quantity} ${widget.product.unit}',
-                    style: AppTypography.labelLarge.copyWith(color: context.appTextPrimary)),
-              ],
-            ),
-          ),
-          const SizedBox(height: AppSizes.lg),
-
-          // Quantity input
-          Text('Quantity', style: AppTypography.labelLarge.copyWith(color: context.appTextPrimary)),
-          const SizedBox(height: AppSizes.sm),
-          TextField(
-            controller: _quantityController,
-            keyboardType: TextInputType.number,
-            style: TextStyle(color: context.appTextPrimary, fontSize: 14),
-            onChanged: (_) => setState(() {}),
-            decoration: InputDecoration(
-              hintText: 'Enter quantity',
-              hintStyle: TextStyle(color: context.appTextTertiary, fontSize: 14),
-              helperText: 'Unit: ${widget.product.unit}',
-              helperStyle: TextStyle(color: context.appTextSecondary, fontSize: 11),
-              filled: true,
-              fillColor: context.appInputFill,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide.none,
+            // Price summary
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: context.isDark
+                    ? AppColors.primary.withValues(alpha: 0.15)
+                    : AppColors.primarySurface,
+                borderRadius: BorderRadius.circular(12),
               ),
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('Unit Price',
+                          style: AppTypography.bodyMedium
+                              .copyWith(color: context.appTextPrimary)),
+                      Text(Formatters.currency(widget.product.sellingPrice),
+                          style: AppTypography.labelMedium
+                              .copyWith(color: context.appTextPrimary)),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('Quantity',
+                          style: AppTypography.bodyMedium
+                              .copyWith(color: context.appTextPrimary)),
+                      Text('×$_quantity',
+                          style: AppTypography.labelMedium
+                              .copyWith(color: context.appTextPrimary)),
+                    ],
+                  ),
+                  Divider(height: 20, color: context.appDivider),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('Total',
+                          style: AppTypography.h4.copyWith(
+                              color: context.isDark
+                                  ? AppColors.primaryLight
+                                  : AppColors.primaryDark)),
+                      Text(Formatters.currency(total),
+                          style: AppTypography.h3.copyWith(
+                              color: context.isDark
+                                  ? AppColors.primaryLight
+                                  : AppColors.primaryDark)),
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
+            const SizedBox(height: AppSizes.xl),
 
-          // Insufficient stock warning
-          if (_quantity <= 0 && _quantityController.text.trim().isNotEmpty) ...[
-            const SizedBox(height: AppSizes.sm),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.warning_rounded,
-                    color: AppColors.error, size: 14),
-                const SizedBox(width: 4),
-                Text(
-                  'Enter a valid quantity',
-                  style:
-                      AppTypography.bodySmall.copyWith(color: AppColors.error),
-                ),
-              ],
-            ),
-          ] else if (!_canSell && _quantity > 0) ...[
-            const SizedBox(height: AppSizes.sm),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.warning_rounded,
-                    color: AppColors.error, size: 14),
-                const SizedBox(width: 4),
-                Text(
-                  'Exceeds available stock',
-                  style:
-                      AppTypography.bodySmall.copyWith(color: AppColors.error),
-                ),
-              ],
+            // Confirm button
+            SizedBox(
+              width: double.infinity,
+              child: AppButton(
+                label: _isProcessing
+                    ? 'Processing...'
+                    : 'Confirm Sale — ${Formatters.currency(total)}',
+                icon: Icons.check_circle_outline_rounded,
+                isLoading: _isProcessing,
+                onPressed: _canSell && !_isProcessing
+                    ? () async {
+                        setState(() => _isProcessing = true);
+                        await widget.onConfirm(_quantity);
+                      }
+                    : null,
+              ),
             ),
           ],
-
-          const SizedBox(height: AppSizes.xxl),
-
-          // Price summary
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: AppColors.primarySurface,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Column(
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text('Unit Price', style: AppTypography.bodyMedium.copyWith(color: AppColors.textPrimary)),
-                    Text(Formatters.currency(widget.product.sellingPrice),
-                        style: AppTypography.labelMedium.copyWith(color: AppColors.textPrimary)),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text('Quantity', style: AppTypography.bodyMedium.copyWith(color: AppColors.textPrimary)),
-                    Text('×$_quantity', style: AppTypography.labelMedium.copyWith(color: AppColors.textPrimary)),
-                  ],
-                ),
-                const Divider(height: 20),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text('Total',
-                        style: AppTypography.h4
-                            .copyWith(color: AppColors.primaryDark)),
-                    Text(Formatters.currency(total),
-                        style: AppTypography.h3
-                            .copyWith(color: AppColors.primaryDark)),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: AppSizes.xl),
-
-          // Confirm button
-          SizedBox(
-            width: double.infinity,
-            child: AppButton(
-              label: _isProcessing
-                  ? 'Processing...'
-                  : 'Confirm Sale — ${Formatters.currency(total)}',
-              icon: Icons.check_circle_outline_rounded,
-              isLoading: _isProcessing,
-              onPressed: _canSell && !_isProcessing
-                  ? () async {
-                      setState(() => _isProcessing = true);
-                      await widget.onConfirm(_quantity);
-                    }
-                  : null,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
