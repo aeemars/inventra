@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
+import '../../../../core/errors/failures.dart';
 import '../../domain/entities/product.dart';
 import '../../domain/repositories/product_repository.dart';
 import '../../data/repositories/product_repository_impl.dart';
@@ -158,46 +159,76 @@ class InventoryController extends StateNotifier<InventoryState> {
   String? get _shopId => _ref.read(currentShopIdProvider);
 
   Future<Product?> addProduct(Product product) async {
-    if (_shopId == null) return null;
+    if (_shopId == null) {
+      state = state.copyWith(error: InventoryFailure.noShop().message);
+      return null;
+    }
     state = state.copyWith(isLoading: true, error: null);
     try {
       final result = await _repository.addProduct(_shopId!, product);
       state = state.copyWith(isLoading: false, isSuccess: true);
       return result;
+    } on Failure catch (e) {
+      state = state.copyWith(isLoading: false, error: e.message);
+      return null;
     } catch (e) {
-      state = state.copyWith(isLoading: false, error: e.toString());
+      state = state.copyWith(
+        isLoading: false,
+        error: 'Failed to add product. Please try again.',
+      );
       return null;
     }
   }
 
   Future<bool> updateProduct(Product product) async {
-    if (_shopId == null) return false;
+    if (_shopId == null) {
+      state = state.copyWith(error: InventoryFailure.noShop().message);
+      return false;
+    }
     state = state.copyWith(isLoading: true, error: null);
     try {
       await _repository.updateProduct(_shopId!, product);
       state = state.copyWith(isLoading: false, isSuccess: true);
       return true;
-    } catch (e) {
-      state = state.copyWith(isLoading: false, error: e.toString());
+    } on Failure catch (e) {
+      state = state.copyWith(isLoading: false, error: e.message);
+      return false;
+    } catch (_) {
+      state = state.copyWith(
+        isLoading: false,
+        error: 'Failed to update product. Please try again.',
+      );
       return false;
     }
   }
 
   Future<bool> deleteProduct(String productId) async {
-    if (_shopId == null) return false;
+    if (_shopId == null) {
+      state = state.copyWith(error: InventoryFailure.noShop().message);
+      return false;
+    }
     state = state.copyWith(isLoading: true, error: null);
     try {
       await _repository.deleteProduct(_shopId!, productId);
       state = state.copyWith(isLoading: false, isSuccess: true);
       return true;
-    } catch (e) {
-      state = state.copyWith(isLoading: false, error: e.toString());
+    } on Failure catch (e) {
+      state = state.copyWith(isLoading: false, error: e.message);
+      return false;
+    } catch (_) {
+      state = state.copyWith(
+        isLoading: false,
+        error: 'Failed to delete product. Please try again.',
+      );
       return false;
     }
   }
 
   Future<bool> adjustStock(String productId, int change, {String productName = ''}) async {
-    if (_shopId == null) return false;
+    if (_shopId == null) {
+      state = state.copyWith(error: InventoryFailure.noShop().message);
+      return false;
+    }
     state = state.copyWith(isLoading: true, error: null);
     try {
       final userId = _ref.read(currentUserProvider)?.uid ?? '';
@@ -216,8 +247,14 @@ class InventoryController extends StateNotifier<InventoryState> {
       }
       state = state.copyWith(isLoading: false, isSuccess: true);
       return true;
-    } catch (e) {
-      state = state.copyWith(isLoading: false, error: e.toString());
+    } on Failure catch (e) {
+      state = state.copyWith(isLoading: false, error: e.message);
+      return false;
+    } catch (_) {
+      state = state.copyWith(
+        isLoading: false,
+        error: 'Failed to update stock level. Please try again.',
+      );
       return false;
     }
   }

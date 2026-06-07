@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_sizes.dart';
 import '../../../../core/constants/app_typography.dart';
+import '../../../../core/errors/failures.dart';
 import '../../../../core/extensions/theme_ext.dart';
 import '../../../../core/widgets/app_button.dart';
 import '../../../../core/widgets/app_card.dart';
@@ -63,8 +64,21 @@ class _InDemandScreenState extends ConsumerState<InDemandScreen> {
 
       _nameController.clear();
       _noteController.clear();
+    } on Failure catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.message), backgroundColor: AppColors.error),
+        );
+      }
     } catch (_) {
-      _showSnack('Failed to add item. Please try again.');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(InDemandFailure.addFailed().message),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
     } finally {
       if (mounted) {
         setState(() => _isSubmitting = false);
@@ -77,8 +91,21 @@ class _InDemandScreenState extends ConsumerState<InDemandScreen> {
   ) async {
     try {
       await docRef.update({'requestCount': FieldValue.increment(1)});
+    } on Failure catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.message), backgroundColor: AppColors.error),
+        );
+      }
     } catch (_) {
-      _showSnack('Failed to update request. Please try again.');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(InDemandFailure.incrementFailed().message),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
     }
   }
 

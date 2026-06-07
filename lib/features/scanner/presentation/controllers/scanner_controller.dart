@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
+import '../../../../core/errors/failures.dart';
 import '../../../../shared/models/scan_history_entry.dart';
 import '../../../auth/presentation/controllers/auth_controller.dart';
 import '../../../inventory/presentation/controllers/inventory_controller.dart';
@@ -108,7 +109,7 @@ class ScannerController extends StateNotifier<ScannerActionState> {
     if (shopId == null) {
       state = state.copyWith(
         status: ScannerStatus.error,
-        message: 'No shop configured',
+        message: ScannerFailure.noShop().message,
       );
       return false;
     }
@@ -134,17 +135,16 @@ class ScannerController extends StateNotifier<ScannerActionState> {
             'Sale complete: $quantity × $productName = ₦${total.toStringAsFixed(2)}',
       );
       return true;
-    } on InsufficientStockException catch (e) {
-      state = state.copyWith(
-        status: ScannerStatus.error,
-        message:
-            'Insufficient stock. Available: ${e.available}, Requested: ${e.requested}',
-      );
+    } on ScannerFailure catch (e) {
+      state = state.copyWith(status: ScannerStatus.error, message: e.message);
       return false;
-    } catch (e) {
+    } on Failure catch (e) {
+      state = state.copyWith(status: ScannerStatus.error, message: e.message);
+      return false;
+    } catch (_) {
       state = state.copyWith(
         status: ScannerStatus.error,
-        message: 'Sale failed: $e',
+        message: ScannerFailure.saleFailed().message,
       );
       return false;
     }
@@ -162,7 +162,7 @@ class ScannerController extends StateNotifier<ScannerActionState> {
     if (shopId == null) {
       state = state.copyWith(
         status: ScannerStatus.error,
-        message: 'No shop configured',
+        message: ScannerFailure.noShop().message,
       );
       return false;
     }
@@ -186,10 +186,16 @@ class ScannerController extends StateNotifier<ScannerActionState> {
         message: 'Restocked $quantity units of $productName',
       );
       return true;
-    } catch (e) {
+    } on ScannerFailure catch (e) {
+      state = state.copyWith(status: ScannerStatus.error, message: e.message);
+      return false;
+    } on Failure catch (e) {
+      state = state.copyWith(status: ScannerStatus.error, message: e.message);
+      return false;
+    } catch (_) {
       state = state.copyWith(
         status: ScannerStatus.error,
-        message: 'Restock failed: $e',
+        message: ScannerFailure.restockFailed().message,
       );
       return false;
     }
@@ -206,7 +212,7 @@ class ScannerController extends StateNotifier<ScannerActionState> {
     if (shopId == null) {
       state = state.copyWith(
         status: ScannerStatus.error,
-        message: 'No shop configured',
+        message: ScannerFailure.noShop().message,
       );
       return false;
     }
@@ -230,17 +236,16 @@ class ScannerController extends StateNotifier<ScannerActionState> {
         message: 'Adjusted $productName: $sign$quantityChange',
       );
       return true;
-    } on InsufficientStockException catch (e) {
-      state = state.copyWith(
-        status: ScannerStatus.error,
-        message:
-            'Cannot reduce below zero. Available: ${e.available}',
-      );
+    } on ScannerFailure catch (e) {
+      state = state.copyWith(status: ScannerStatus.error, message: e.message);
       return false;
-    } catch (e) {
+    } on Failure catch (e) {
+      state = state.copyWith(status: ScannerStatus.error, message: e.message);
+      return false;
+    } catch (_) {
       state = state.copyWith(
         status: ScannerStatus.error,
-        message: 'Adjustment failed: $e',
+        message: ScannerFailure.adjustmentFailed().message,
       );
       return false;
     }

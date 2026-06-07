@@ -154,8 +154,14 @@ class AuthController extends StateNotifier<AuthState> {
         successMessage: 'Profile photo updated',
       );
       return true;
-    } catch (e) {
-      state = state.copyWith(isLoading: false, error: e.toString());
+    } on Failure catch (e) {
+      state = state.copyWith(isLoading: false, error: e.message);
+      return false;
+    } catch (_) {
+      state = state.copyWith(
+        isLoading: false,
+        error: 'An unexpected error occurred. Please try again.',
+      );
       return false;
     }
   }
@@ -178,8 +184,14 @@ class AuthController extends StateNotifier<AuthState> {
         successMessage: 'Profile updated successfully',
       );
       return true;
-    } catch (e) {
-      state = state.copyWith(isLoading: false, error: e.toString());
+    } on Failure catch (e) {
+      state = state.copyWith(isLoading: false, error: e.message);
+      return false;
+    } catch (_) {
+      state = state.copyWith(
+        isLoading: false,
+        error: 'An unexpected error occurred. Please try again.',
+      );
       return false;
     }
   }
