@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hive_ce_flutter/hive_flutter.dart';
 import 'core/cache/hive_adapters.dart';
+import 'core/notifications/local_notification_service.dart';
 import 'firebase_options.dart';
 
 /// Initialize Firebase, Hive, and system UI
@@ -46,4 +47,6 @@ Future<void> bootstrap() async {
   await Hive.initFlutter();
   await Hive.openBox<dynamic>('app_prefs');
   registerHiveAdapters();
+
+  await LocalNotificationService.initialize();
 }
