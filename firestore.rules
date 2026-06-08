@@ -14,7 +14,7 @@ service cloud.firestore {
     function isShopMember(shopId) {
       return isAuthenticated() && (
         getUserData().shopId == shopId || 
-        ('profiles' in getUserData() && getUserData().profiles.any(p, p.shopId == shopId)) ||
+        ('profiles' in getUserData() && getUserData().profiles.any(p, p.get('shopId', null) == shopId)) ||
         // Fallback for batch creation where user and shop are created together
         (request.resource.data != null && request.resource.data.shopId == shopId)
       );
@@ -23,7 +23,7 @@ service cloud.firestore {
     function hasShopRole(shopId, roleList) {
       return isAuthenticated() && (
         (getUserData().shopId == shopId && getUserData().role in roleList) ||
-        ('profiles' in getUserData() && getUserData().profiles.any(p, p.shopId == shopId && p.role in roleList))
+        ('profiles' in getUserData() && getUserData().profiles.any(p, p.get('shopId', null) == shopId && p.get('role', 'sales') in roleList))
       );
     }
 
@@ -39,7 +39,7 @@ service cloud.firestore {
                     && (!('displayName' in request.resource.data.keys()) || (request.resource.data.displayName is string && request.resource.data.displayName.size() <= 100))
                     && (!('role' in request.resource.data.keys()) || request.resource.data.role == resource.data.role)
                     && (!('shopId' in request.resource.data.keys()) || request.resource.data.shopId == resource.data.shopId)
-                    && (!('profiles' in request.resource.data.keys()) || request.resource.data.profiles.all(p, p.shopId == null || get(/databases/$(database)/documents/shops/$(p.shopId)).data.ownerId == request.auth.uid));
+                    && (!('profiles' in request.resource.data.keys()) || request.resource.data.profiles.all(p, p.get('shopId', null) == null || get(/databases/$(database)/documents/shops/$(p.get('shopId', 'default'))).data.ownerId == request.auth.uid));
       allow delete: if false;
     }
 
