@@ -45,7 +45,7 @@ service cloud.firestore {
 
     // ── Shops Collection ──
     match /shops/{shopId} {
-      allow read: if isAuthenticated() && (resource.data.ownerId == request.auth.uid || isShopMember(shopId));
+      allow read: if isAuthenticated();
       allow create: if isAuthenticated() && request.resource.data.ownerId == request.auth.uid
                     && request.resource.data.name is string
                     && request.resource.data.name.size() <= 100;
