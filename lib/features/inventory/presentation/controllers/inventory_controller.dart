@@ -6,16 +6,12 @@ import '../../domain/entities/product.dart';
 import '../../domain/repositories/product_repository.dart';
 import '../../data/repositories/product_repository_impl.dart';
 import '../../../auth/presentation/controllers/auth_controller.dart';
+import '../../../../shared/providers/firebase_providers.dart';
+export '../../../../shared/providers/firebase_providers.dart' show currentShopIdProvider;
 
 // ── Repository Provider ──
 final productRepositoryProvider = Provider<ProductRepository>((ref) {
   return ProductRepositoryImpl();
-});
-
-// ── Shop ID Provider ──
-final currentShopIdProvider = Provider<String?>((ref) {
-  final user = ref.watch(currentUserProvider);
-  return user?.shopId;
 });
 
 // ── Products Stream ──

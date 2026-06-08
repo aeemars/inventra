@@ -1,4 +1,5 @@
 import 'package:equatable/equatable.dart';
+import 'user_profile.dart';
 
 /// Represents the user's role within a shop
 enum UserRole {
@@ -43,6 +44,7 @@ class AppUser extends Equatable {
   final DateTime? lastLoginAt;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final List<UserProfile> profiles;
 
   const AppUser({
     required this.uid,
@@ -58,6 +60,7 @@ class AppUser extends Equatable {
     this.lastLoginAt,
     required this.createdAt,
     required this.updatedAt,
+    this.profiles = const [],
   });
 
   bool get hasShop => shopId != null && shopId!.isNotEmpty;
@@ -76,6 +79,7 @@ class AppUser extends Equatable {
     DateTime? lastLoginAt,
     DateTime? createdAt,
     DateTime? updatedAt,
+    List<UserProfile>? profiles,
   }) {
     return AppUser(
       uid: uid ?? this.uid,
@@ -91,9 +95,23 @@ class AppUser extends Equatable {
       lastLoginAt: lastLoginAt ?? this.lastLoginAt,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      profiles: profiles ?? this.profiles,
     );
   }
 
   @override
-  List<Object?> get props => [uid, email, displayName, photoUrl, phoneNumber, shopId, shopName, role, fcmToken, isActive, lastLoginAt];
+  List<Object?> get props => [
+        uid,
+        email,
+        displayName,
+        photoUrl,
+        phoneNumber,
+        shopId,
+        shopName,
+        role,
+        fcmToken,
+        isActive,
+        lastLoginAt,
+        profiles,
+      ];
 }

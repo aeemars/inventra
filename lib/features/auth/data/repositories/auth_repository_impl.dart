@@ -6,6 +6,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../../../core/constants/firestore_paths.dart';
 import '../../../../core/errors/failures.dart';
 import '../../domain/entities/app_user.dart';
+import '../../domain/entities/user_profile.dart';
 import '../../domain/repositories/auth_repository.dart';
 import '../models/user_model.dart';
 
@@ -70,7 +71,9 @@ class AuthRepositoryImpl implements AuthRepository {
     required UserRole role,
   }) async {
     try {
+      // ── Step 1: Authenticate — create new or sign in if email exists ──
       late final String uid;
+      bool isNewAuthUser = false;
 
       try {
         final credential = await _auth.createUserWithEmailAndPassword(
@@ -79,10 +82,9 @@ class AuthRepositoryImpl implements AuthRepository {
         );
         await credential.user!.updateDisplayName(displayName);
         uid = credential.user!.uid;
+        isNewAuthUser = true;
       } on FirebaseAuthException catch (e) {
         if (e.code == 'email-already-in-use') {
-          // Auth record exists (e.g. Firestore profile was deleted manually).
-          // Try signing in with the given password to reclaim the account.
           try {
             final credential = await _auth.signInWithEmailAndPassword(
               email: email.trim(),
@@ -91,18 +93,17 @@ class AuthRepositoryImpl implements AuthRepository {
             await credential.user!.updateDisplayName(displayName);
             uid = credential.user!.uid;
           } on FirebaseAuthException catch (signInError) {
-            // Password doesn't match the existing Auth record
             if (signInError.code == 'wrong-password' ||
                 signInError.code == 'invalid-credential') {
               throw const AuthFailure(
-                message:
-                    'An account with this email already exists. '
-                    'Please sign in instead, or use "Forgot Password" to reset it.',
+                message: 'An account with this email already exists. '
+                    'Sign in instead, or use Forgot Password to reset it.',
                 code: 'email-already-in-use',
               );
             }
             throw AuthFailure(
-              message: 'Unable to access existing account: ${signInError.message ?? signInError.code}',
+              message: 'Unable to access existing account: '
+                  '${signInError.message ?? signInError.code}',
               code: signInError.code,
             );
           }
@@ -111,30 +112,113 @@ class AuthRepositoryImpl implements AuthRepository {
         }
       }
 
+      // ── Step 2: Security — check shop name ownership ──
+      // Shop names are globally unique. If the name is already claimed
+      // by a different user, registration is blocked immediately.
+      QuerySnapshot<Map<String, dynamic>>? shopNameResult;
+
+      if (shopName.trim().isNotEmpty) {
+        shopNameResult = await _firestore
+            .collection(FirestorePaths.shops)
+            .where('name', isEqualTo: shopName.trim())
+            .limit(1)
+            .get();
+
+        if (shopNameResult.docs.isNotEmpty) {
+          final ownerId =
+              shopNameResult.docs.first.data()['ownerId'] as String?;
+
+          if (ownerId != uid) {
+            // Another account owns this shop name — block and clean up
+            if (isNewAuthUser) {
+              try { await _auth.currentUser?.delete(); } catch (_) {}
+            }
+            throw const AuthFailure(
+              message: 'This shop name is already registered by another account. '
+                  'Please choose a unique shop name.',
+              code: 'shop-name-taken',
+            );
+          }
+          // ownerId == uid: same person adding a second profile — allowed
+        }
+      }
+
       final now = DateTime.now();
 
-      // Check if the Firestore profile already exists — skip recreation if so
+      // ── Step 3: Check if a Firestore profile already exists ──
       final existingDoc = await _firestore
           .collection(FirestorePaths.users)
           .doc(uid)
           .get();
 
       if (existingDoc.exists) {
-        // Profile exists; just fetch and return
-        final user = UserModel.fromFirestore(existingDoc).toEntity();
-        _cachedUser = user;
-        return user;
+        // ── Same person, adding a second profile ──
+        // The shop name must match one of their existing shops exactly.
+        if (shopNameResult == null || shopNameResult.docs.isEmpty) {
+          throw const AuthFailure(
+            message: 'Shop not found. Enter the exact shop name used when '
+                'you created your first profile to link your accounts.',
+            code: 'shop-not-found',
+          );
+        }
+
+        final linkedShopId = shopNameResult.docs.first.id;
+        final existingUser =
+            UserModel.fromFirestore(existingDoc).toEntity();
+
+        // Block duplicate roles on the same shop
+        final alreadyHasRole = existingUser.profiles.any(
+          (p) => p.role == role && p.shopId == linkedShopId,
+        );
+        if (alreadyHasRole) {
+          throw AuthFailure(
+            message: 'You already have a ${role.displayName} profile '
+                'for "${shopName.trim()}". Sign in and switch profiles instead.',
+            code: 'duplicate-role',
+          );
+        }
+
+        final newProfile = UserProfile(
+          profileId: 'profile_${now.millisecondsSinceEpoch}',
+          displayName: displayName.trim(),
+          role: role,
+          shopId: linkedShopId,
+          shopName: shopName.trim(),
+          createdAt: now,
+        );
+
+        await _firestore
+            .collection(FirestorePaths.users)
+            .doc(uid)
+            .update({
+          'profiles': FieldValue.arrayUnion([newProfile.toMap()]),
+          'updatedAt': Timestamp.fromDate(now),
+        });
+
+        final updatedUser = existingUser.copyWith(
+          profiles: [...existingUser.profiles, newProfile],
+        );
+        _cachedUser = updatedUser;
+        return updatedUser;
       }
 
-      // Profile is missing — re-create it (and shop if admin)
+      // ── Step 4: Brand-new user — create shop (admin) and first profile ──
       String? shopId;
-      if (role == UserRole.admin && shopName.trim().isNotEmpty) {
-        final shopRef = _firestore.collection(FirestorePaths.shops).doc();
-        shopId = shopRef.id;
+      final firstProfile = UserProfile(
+        profileId: 'profile_${now.millisecondsSinceEpoch}',
+        displayName: displayName.trim(),
+        role: role,
+        shopId: role == UserRole.admin && shopName.trim().isNotEmpty ? null : null, // Will be set below
+        shopName: shopName.trim().isNotEmpty ? shopName.trim() : null,
+        createdAt: now,
+      );
 
+      if (role == UserRole.admin && shopName.trim().isNotEmpty) {
+        final shopRef =
+            _firestore.collection(FirestorePaths.shops).doc();
+        shopId = shopRef.id;
         final batch = _firestore.batch();
 
-        // 1. Create shop document
         batch.set(shopRef, {
           'name': shopName.trim(),
           'ownerId': uid,
@@ -147,7 +231,6 @@ class AuthRepositoryImpl implements AuthRepository {
           'updatedAt': Timestamp.fromDate(now),
         });
 
-        // 2. Initialize default shop settings
         batch.set(
           _firestore.doc(FirestorePaths.shopSettings(shopRef.id)),
           {
@@ -163,26 +246,51 @@ class AuthRepositoryImpl implements AuthRepository {
           },
         );
 
-        // 3. Create user document with shopId linked
-        batch.set(
-          _firestore.collection(FirestorePaths.users).doc(uid),
-          UserModel(
-            uid: uid,
-            email: email.trim(),
-            displayName: displayName.trim(),
-            role: role.name,
-            shopId: shopId,
-            shopName: shopName.trim(),
-            isActive: true,
-            lastLoginAt: now,
-            createdAt: now,
-            updatedAt: now,
-          ).toFirestore(),
+        final adminProfile = UserProfile(
+          profileId: firstProfile.profileId,
+          displayName: firstProfile.displayName,
+          role: firstProfile.role,
+          shopId: shopId,
+          shopName: firstProfile.shopName,
+          createdAt: firstProfile.createdAt,
         );
 
+        final userModel = UserModel(
+          uid: uid,
+          email: email.trim(),
+          displayName: displayName.trim(),
+          role: role.name,
+          shopId: shopId,
+          shopName: shopName.trim(),
+          isActive: true,
+          lastLoginAt: now,
+          createdAt: now,
+          updatedAt: now,
+          profiles: [adminProfile.toMap()],
+        );
+
+        batch.set(
+          _firestore.collection(FirestorePaths.users).doc(uid),
+          userModel.toFirestore(),
+        );
         await batch.commit();
+
+        final user = AppUser(
+          uid: uid,
+          email: email.trim(),
+          displayName: displayName.trim(),
+          role: role,
+          shopId: shopId,
+          shopName: shopName.trim(),
+          isActive: true,
+          lastLoginAt: now,
+          createdAt: now,
+          updatedAt: now,
+          profiles: [adminProfile],
+        );
+        _cachedUser = user;
+        return user;
       } else {
-        // Non-admin or no shop name — create user without shop
         final userModel = UserModel(
           uid: uid,
           email: email.trim(),
@@ -193,28 +301,30 @@ class AuthRepositoryImpl implements AuthRepository {
           lastLoginAt: now,
           createdAt: now,
           updatedAt: now,
+          profiles: [firstProfile.toMap()],
         );
 
         await _firestore
             .collection(FirestorePaths.users)
             .doc(uid)
             .set(userModel.toFirestore());
-      }
 
-      final user = AppUser(
-        uid: uid,
-        email: email.trim(),
-        displayName: displayName.trim(),
-        role: role,
-        shopId: shopId,
-        shopName: shopName.trim(),
-        isActive: true,
-        lastLoginAt: now,
-        createdAt: now,
-        updatedAt: now,
-      );
-      _cachedUser = user;
-      return user;
+        final user = AppUser(
+          uid: uid,
+          email: email.trim(),
+          displayName: displayName.trim(),
+          role: role,
+          shopId: shopId,
+          shopName: shopName.trim(),
+          isActive: true,
+          lastLoginAt: now,
+          createdAt: now,
+          updatedAt: now,
+          profiles: [firstProfile],
+        );
+        _cachedUser = user;
+        return user;
+      }
     } catch (e) {
       throw _handleException(e);
     }

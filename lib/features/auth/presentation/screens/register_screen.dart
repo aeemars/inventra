@@ -330,11 +330,19 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
                                   // Shop Name
                                   AppTextField(
                                     label: 'Shop Name',
-                                    hint: 'Champions Supermart',
+                                    hint: 'e.g. Champions Supermart (must be unique)',
                                     controller: _shopNameController,
+                                    prefixIcon: const Icon(Icons.storefront_outlined, size: 20),
                                     textInputAction: TextInputAction.next,
                                     validator: (v) => Validators.required(v, 'Shop Name'),
-                                    prefixIcon: const Icon(Icons.store_outlined, size: 20),
+                                  ),
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 4, left: 4),
+                                    child: Text(
+                                      'Use the same shop name to link a second role to an existing shop.',
+                                      style: AppTypography.labelSmall
+                                          .copyWith(color: context.appTextTertiary),
+                                    ),
                                   ),
                                   const SizedBox(height: AppSizes.lg),
 

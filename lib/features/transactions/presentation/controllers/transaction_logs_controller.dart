@@ -2,7 +2,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import '../../../../shared/providers/firebase_providers.dart';
-import '../../../inventory/presentation/controllers/inventory_controller.dart';
 
 
 /// Represents a single transaction log entry for display

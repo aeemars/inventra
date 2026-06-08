@@ -11,7 +11,6 @@ import '../../../../core/widgets/app_card.dart';
 import '../../../../core/widgets/app_text_field.dart';
 import '../../../../shared/providers/firebase_providers.dart';
 import '../../../auth/presentation/controllers/auth_controller.dart';
-import '../../../inventory/presentation/controllers/inventory_controller.dart';
 
 class InDemandScreen extends ConsumerStatefulWidget {
   const InDemandScreen({super.key});

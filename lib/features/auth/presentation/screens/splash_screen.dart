@@ -5,6 +5,7 @@ import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_typography.dart';
 import '../../../../core/notifications/local_notification_service.dart';
 import '../controllers/auth_controller.dart';
+import '../../../../shared/providers/active_profile_provider.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
@@ -82,7 +83,24 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
 
     final authState = ref.read(authStateProvider);
     authState.when(
-      data: (user) => context.go(user != null ? '/dashboard' : '/login'),
+      data: (user) {
+        if (user != null) {
+          if (user.profiles.length > 1) {
+            // Multiple profiles — user must choose
+            context.go('/profile-select');
+          } else {
+            // Single or no profiles — auto-activate if present
+            if (user.profiles.isNotEmpty) {
+              ref
+                  .read(activeProfileProvider.notifier)
+                  .setProfile(user.profiles.first);
+            }
+            context.go('/dashboard');
+          }
+        } else {
+          context.go('/login');
+        }
+      },
       loading: () => Future.delayed(
         const Duration(milliseconds: 800),
         () { if (mounted) context.go('/login'); },

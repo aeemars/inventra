@@ -6,6 +6,8 @@ import '../../features/sales/data/repositories/transaction_repository.dart';
 import '../repositories/notification_repository.dart';
 import '../repositories/analytics_repository.dart';
 import '../repositories/settings_repository.dart';
+import 'active_profile_provider.dart';
+import '../../features/auth/presentation/controllers/auth_controller.dart';
 
 // ── Core Firebase Providers ──
 
@@ -45,3 +47,10 @@ final analyticsRepositoryProvider = Provider<AnalyticsRepository>((ref) {
 final settingsRepositoryProvider = Provider<SettingsRepository>((ref) {
   return SettingsRepository(firestore: ref.watch(firestoreProvider));
 });
+
+final currentShopIdProvider = Provider<String?>((ref) {
+  final active = ref.watch(activeProfileProvider);
+  if (active?.shopId != null) return active!.shopId;
+  return ref.watch(currentUserProvider)?.shopId;
+});
+

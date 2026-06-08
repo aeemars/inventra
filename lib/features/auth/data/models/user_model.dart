@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../domain/entities/app_user.dart';
+import '../../domain/entities/user_profile.dart';
 
 /// Firestore data model for User
 class UserModel {
@@ -16,6 +17,7 @@ class UserModel {
   final DateTime? lastLoginAt;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final List<Map<String, dynamic>> profiles;
 
   const UserModel({
     required this.uid,
@@ -31,6 +33,7 @@ class UserModel {
     this.lastLoginAt,
     required this.createdAt,
     required this.updatedAt,
+    this.profiles = const [],
   });
 
   factory UserModel.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
@@ -49,6 +52,10 @@ class UserModel {
       lastLoginAt: (data['lastLoginAt'] as Timestamp?)?.toDate(),
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       updatedAt: (data['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      profiles: ((data['profiles'] as List?)
+              ?.map((e) => Map<String, dynamic>.from(e as Map))
+              .toList()) ??
+          [],
     );
   }
 
@@ -67,6 +74,7 @@ class UserModel {
       'lastLoginAt': lastLoginAt != null ? Timestamp.fromDate(lastLoginAt!) : null,
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(updatedAt),
+      'profiles': profiles,
     };
   }
 
@@ -85,6 +93,7 @@ class UserModel {
       lastLoginAt: lastLoginAt,
       createdAt: createdAt,
       updatedAt: updatedAt,
+      profiles: profiles.map(UserProfile.fromMap).toList(),
     );
   }
 
@@ -118,6 +127,7 @@ class UserModel {
       lastLoginAt: user.lastLoginAt,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
+      profiles: user.profiles.map((p) => p.toMap()).toList(),
     );
   }
 }

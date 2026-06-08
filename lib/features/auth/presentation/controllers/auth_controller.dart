@@ -6,6 +6,7 @@ import '../../domain/entities/app_user.dart';
 import '../../domain/repositories/auth_repository.dart';
 import '../../data/repositories/auth_repository_impl.dart';
 import '../../../../core/errors/failures.dart';
+import '../../../../shared/providers/active_profile_provider.dart';
 
 // ── Repository Provider ──
 final authRepositoryProvider = Provider<AuthRepository>((ref) {
@@ -33,7 +34,7 @@ final currentUserProvider = Provider<AppUser?>((ref) {
 // ── Auth Controller ──
 final authControllerProvider =
     StateNotifierProvider<AuthController, AuthState>((ref) {
-  return AuthController(ref.watch(authRepositoryProvider));
+  return AuthController(ref.watch(authRepositoryProvider), ref);
 });
 
 @immutable
@@ -69,8 +70,9 @@ class AuthState {
 
 class AuthController extends StateNotifier<AuthState> {
   final AuthRepository _repository;
+  final Ref ref;
 
-  AuthController(this._repository) : super(AuthState.initial);
+  AuthController(this._repository, this.ref) : super(AuthState.initial);
 
   Future<bool> signIn({
     required String email,
@@ -140,6 +142,7 @@ class AuthController extends StateNotifier<AuthState> {
   }
 
   Future<void> signOut() async {
+    ref.read(activeProfileProvider.notifier).clear();
     await _repository.signOut();
     state = AuthState.initial;
   }
