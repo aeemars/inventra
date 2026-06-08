@@ -152,6 +152,7 @@ class _EditPinGuardState extends ConsumerState<EditPinGuard> {
         .setEditPin(_firstPin, code);
 
     if (success && mounted) {
+      ref.invalidate(authStateProvider);
       setState(() {
         _generatedRecoveryCode = code;
         _showRecoveryCodeScreen = true;
