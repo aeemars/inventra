@@ -428,7 +428,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                             BorderRadius.circular(AppSizes.radiusFull),
                       ),
                       child: Text(
-                        user?.role.displayName.toUpperCase() ?? 'USER',
+                        'SHOP OWNER',
                         style: AppTypography.labelSmall.copyWith(
                           color: AppColors.primary,
                           fontWeight: FontWeight.w700,

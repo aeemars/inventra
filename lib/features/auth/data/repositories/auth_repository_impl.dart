@@ -6,7 +6,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../../../core/constants/firestore_paths.dart';
 import '../../../../core/errors/failures.dart';
 import '../../domain/entities/app_user.dart';
-import '../../domain/entities/user_profile.dart';
 import '../../domain/repositories/auth_repository.dart';
 import '../models/user_model.dart';
 
@@ -68,7 +67,6 @@ class AuthRepositoryImpl implements AuthRepository {
     required String password,
     required String displayName,
     required String shopName,
-    required UserRole role,
   }) async {
     try {
       // ── Step 1: Authenticate — create new or sign in if email exists ──
@@ -112,13 +110,9 @@ class AuthRepositoryImpl implements AuthRepository {
         }
       }
 
-      // ── Step 2: Security — check shop name ownership ──
-      // Shop names are globally unique. If the name is already claimed
-      // by a different user, registration is blocked immediately.
-      QuerySnapshot<Map<String, dynamic>>? shopNameResult;
-
+      // ── Step 2: Check if shop name is globally unique ──
       if (shopName.trim().isNotEmpty) {
-        shopNameResult = await _firestore
+        final shopNameResult = await _firestore
             .collection(FirestorePaths.shops)
             .where('name', isEqualTo: shopName.trim())
             .limit(1)
@@ -139,133 +133,33 @@ class AuthRepositoryImpl implements AuthRepository {
               code: 'shop-name-taken',
             );
           }
-          // ownerId == uid: same person adding a second profile — allowed
         }
       }
 
       final now = DateTime.now();
 
-      // ── Step 3: Check if a Firestore profile already exists ──
+      // ── Step 3: Check if a Firestore user document already exists ──
       final existingDoc = await _firestore
           .collection(FirestorePaths.users)
           .doc(uid)
           .get();
 
       if (existingDoc.exists) {
-        final existingUser =
-            UserModel.fromFirestore(existingDoc).toEntity();
-
-        List<UserProfile> profiles = List.from(existingUser.profiles);
-        // Auto-migrate legacy user with empty profiles but having shop details
-        if (profiles.isEmpty && existingUser.shopId != null && existingUser.shopId!.isNotEmpty) {
-          final legacyProfile = UserProfile(
-            profileId: 'profile_legacy_${existingUser.createdAt.millisecondsSinceEpoch}',
-            displayName: existingUser.displayName,
-            role: existingUser.role,
-            shopId: existingUser.shopId,
-            shopName: existingUser.shopName,
-            createdAt: existingUser.createdAt,
-          );
-          profiles.add(legacyProfile);
-          
-          try {
-            await _firestore
-                .collection(FirestorePaths.users)
-                .doc(uid)
-                .update({
-              'profiles': [legacyProfile.toMap()],
-              'updatedAt': Timestamp.fromDate(now),
-            });
-          } catch (_) {
-            // Non-fatal migration failure, continue
-          }
-        }
-
-        if (profiles.isNotEmpty) {
-          // ── Same person, adding a second profile ──
-          // Search for a matching profile in their own list case-insensitively
-          UserProfile? matchingProfile;
-          for (final p in profiles) {
-            if (p.shopName?.trim().toLowerCase() == shopName.trim().toLowerCase()) {
-              matchingProfile = p;
-              break;
-            }
-          }
-
-          String? linkedShopId;
-          String? exactShopName;
-
-          if (matchingProfile != null) {
-            linkedShopId = matchingProfile.shopId;
-            exactShopName = matchingProfile.shopName;
-          } else if (shopNameResult != null && shopNameResult.docs.isNotEmpty) {
-            linkedShopId = shopNameResult.docs.first.id;
-            exactShopName = shopNameResult.docs.first.data()['name'] as String?;
-          }
-
-          if (linkedShopId == null) {
-            throw const AuthFailure(
-              message: 'Shop not found. Enter the exact shop name used when '
-                  'you created your first profile to link your accounts.',
-              code: 'shop-not-found',
-            );
-          }
-
-          // Block duplicate roles on the same shop
-          final alreadyHasRole = profiles.any(
-            (p) => p.role == role && p.shopId == linkedShopId,
-          );
-          if (alreadyHasRole) {
-            throw AuthFailure(
-              message: 'You already have a ${role.displayName} profile '
-                  'for "${exactShopName ?? shopName.trim()}". Sign in and switch profiles instead.',
-              code: 'duplicate-role',
-            );
-          }
-
-          final newProfile = UserProfile(
-            profileId: 'profile_${now.millisecondsSinceEpoch}',
-            displayName: displayName.trim(),
-            role: role,
-            shopId: linkedShopId,
-            shopName: exactShopName ?? shopName.trim(),
-            createdAt: now,
-          );
-
-          await _firestore
-              .collection(FirestorePaths.users)
-              .doc(uid)
-              .update({
-            'profiles': FieldValue.arrayUnion([newProfile.toMap()]),
-            'updatedAt': Timestamp.fromDate(now),
-          });
-
-          final updatedUser = existingUser.copyWith(
-            profiles: [...profiles, newProfile],
-          );
-          _cachedUser = updatedUser;
-          return updatedUser;
-        }
+        final existingUser = UserModel.fromFirestore(existingDoc).toEntity();
+        _cachedUser = existingUser;
+        return existingUser;
       }
 
-      // ── Step 4: Brand-new user — create shop (admin) and first profile ──
+      // ── Step 4: Brand-new user — create shop and user document ──
       String? shopId;
-      final firstProfile = UserProfile(
-        profileId: 'profile_${now.millisecondsSinceEpoch}',
-        displayName: displayName.trim(),
-        role: role,
-        shopId: role == UserRole.admin && shopName.trim().isNotEmpty ? null : null, // Will be set below
-        shopName: shopName.trim().isNotEmpty ? shopName.trim() : null,
-        createdAt: now,
-      );
-
-      if (role == UserRole.admin && shopName.trim().isNotEmpty) {
+      if (shopName.trim().isNotEmpty) {
         final shopRef =
             _firestore.collection(FirestorePaths.shops).doc();
         shopId = shopRef.id;
         final batch = _firestore.batch();
 
         batch.set(shopRef, {
+          'id': shopId,
           'name': shopName.trim(),
           'ownerId': uid,
           'currency': 'NGN',
@@ -278,7 +172,7 @@ class AuthRepositoryImpl implements AuthRepository {
         });
 
         batch.set(
-          _firestore.doc(FirestorePaths.shopSettings(shopRef.id)),
+          _firestore.doc(FirestorePaths.shopSettings(shopId)),
           {
             'lowStockThreshold': 5,
             'currency': 'NGN',
@@ -292,48 +186,28 @@ class AuthRepositoryImpl implements AuthRepository {
           },
         );
 
-        final adminProfile = UserProfile(
-          profileId: firstProfile.profileId,
-          displayName: firstProfile.displayName,
-          role: firstProfile.role,
-          shopId: shopId,
-          shopName: firstProfile.shopName,
-          createdAt: firstProfile.createdAt,
-        );
-
         final userModel = UserModel(
           uid: uid,
           email: email.trim(),
           displayName: displayName.trim(),
-          role: role.name,
           shopId: shopId,
           shopName: shopName.trim(),
           isActive: true,
           lastLoginAt: now,
           createdAt: now,
           updatedAt: now,
-          profiles: [adminProfile.toMap()],
+          editPin: null,
+          editPinRecoveryCode: null,
         );
 
         batch.set(
           _firestore.collection(FirestorePaths.users).doc(uid),
           userModel.toFirestore(),
         );
+
         await batch.commit();
 
-        final user = AppUser(
-          uid: uid,
-          email: email.trim(),
-          displayName: displayName.trim(),
-          role: role,
-          shopId: shopId,
-          shopName: shopName.trim(),
-          isActive: true,
-          lastLoginAt: now,
-          createdAt: now,
-          updatedAt: now,
-          profiles: [adminProfile],
-        );
+        final user = userModel.toEntity();
         _cachedUser = user;
         return user;
       } else {
@@ -341,13 +215,14 @@ class AuthRepositoryImpl implements AuthRepository {
           uid: uid,
           email: email.trim(),
           displayName: displayName.trim(),
-          role: role.name,
-          shopName: shopName.trim(),
+          shopId: null,
+          shopName: null,
           isActive: true,
           lastLoginAt: now,
           createdAt: now,
           updatedAt: now,
-          profiles: [firstProfile.toMap()],
+          editPin: null,
+          editPinRecoveryCode: null,
         );
 
         await _firestore
@@ -355,19 +230,7 @@ class AuthRepositoryImpl implements AuthRepository {
             .doc(uid)
             .set(userModel.toFirestore());
 
-        final user = AppUser(
-          uid: uid,
-          email: email.trim(),
-          displayName: displayName.trim(),
-          role: role,
-          shopId: shopId,
-          shopName: shopName.trim(),
-          isActive: true,
-          lastLoginAt: now,
-          createdAt: now,
-          updatedAt: now,
-          profiles: [firstProfile],
-        );
+        final user = userModel.toEntity();
         _cachedUser = user;
         return user;
       }
@@ -380,8 +243,8 @@ class AuthRepositoryImpl implements AuthRepository {
   Future<void> sendPasswordResetEmail(String email) async {
     try {
       await _auth.sendPasswordResetEmail(email: email.trim());
-    } on FirebaseAuthException catch (e) {
-      throw AuthFailure.fromCode(e.code);
+    } catch (e) {
+      throw _handleException(e);
     }
   }
 
@@ -398,6 +261,8 @@ class AuthRepositoryImpl implements AuthRepository {
     String? phoneNumber,
     String? shopName,
     String? fcmToken,
+    String? editPin,
+    String? editPinRecoveryCode,
   }) async {
     final uid = _auth.currentUser?.uid;
     if (uid == null) throw const AuthFailure(message: 'Not authenticated');
@@ -410,6 +275,10 @@ class AuthRepositoryImpl implements AuthRepository {
     if (phoneNumber != null) updates['phoneNumber'] = phoneNumber;
     if (shopName != null) updates['shopName'] = shopName;
     if (fcmToken != null) updates['fcmToken'] = fcmToken;
+    if (editPin != null) updates['editPin'] = editPin;
+    if (editPinRecoveryCode != null) {
+      updates['editPinRecoveryCode'] = editPinRecoveryCode;
+    }
 
     await _firestore
         .collection(FirestorePaths.users)
@@ -418,20 +287,19 @@ class AuthRepositoryImpl implements AuthRepository {
 
     if (_cachedUser != null) {
       _cachedUser = _cachedUser!.copyWith(
-        displayName: displayName ?? _cachedUser!.displayName,
-        photoUrl: photoUrl ?? _cachedUser!.photoUrl,
-        phoneNumber: phoneNumber ?? _cachedUser!.phoneNumber,
-        shopName: shopName ?? _cachedUser!.shopName,
-        fcmToken: fcmToken ?? _cachedUser!.fcmToken,
+        displayName: displayName,
+        photoUrl: photoUrl,
+        phoneNumber: phoneNumber,
+        shopName: shopName,
+        fcmToken: fcmToken,
+        editPin: editPin,
+        editPinRecoveryCode: editPinRecoveryCode,
       );
     }
   }
 
   @override
   Future<String> uploadProfilePhoto(String filePath) async {
-    final uid = _auth.currentUser?.uid;
-    if (uid == null) throw const AuthFailure(message: 'Not authenticated');
-
     try {
       final file = File(filePath);
 
@@ -475,33 +343,7 @@ class AuthRepositoryImpl implements AuthRepository {
       throw const AuthFailure(message: 'User profile not found');
     }
 
-    final user = UserModel.fromFirestore(doc).toEntity();
-
-    // Auto-migrate legacy user with empty profiles but having shop details
-    if (user.profiles.isEmpty && user.shopId != null && user.shopId!.isNotEmpty) {
-      final legacyProfile = UserProfile(
-        profileId: 'profile_legacy_${user.createdAt.millisecondsSinceEpoch}',
-        displayName: user.displayName,
-        role: user.role,
-        shopId: user.shopId,
-        shopName: user.shopName,
-        createdAt: user.createdAt,
-      );
-
-      final migratedUser = user.copyWith(
-        profiles: [legacyProfile],
-      );
-
-      // Save migration in Firestore asynchronously
-      _firestore.collection(FirestorePaths.users).doc(uid).update({
-        'profiles': [legacyProfile.toMap()],
-        'updatedAt': Timestamp.fromDate(DateTime.now()),
-      }).catchError((_) {});
-
-      return migratedUser;
-    }
-
-    return user;
+    return UserModel.fromFirestore(doc).toEntity();
   }
 
   AuthFailure _handleException(dynamic e) {
@@ -510,18 +352,6 @@ class AuthRepositoryImpl implements AuthRepository {
     }
     if (e is FirebaseAuthException) {
       return AuthFailure.fromCode(e.code);
-    }
-    if (e is FirebaseException) {
-      if (e.code == 'permission-denied') {
-        return const AuthFailure(
-          message: 'Access denied: Insufficient permissions to perform database operation.',
-          code: 'permission-denied',
-        );
-      }
-      return AuthFailure(
-        message: e.message ?? 'A database error occurred. Please try again.',
-        code: e.code,
-      );
     }
     return AuthFailure(message: e.toString());
   }

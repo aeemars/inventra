@@ -9,6 +9,7 @@ import '../../../../core/widgets/app_card.dart';
 import '../../domain/entities/product.dart';
 import '../../../auth/presentation/controllers/auth_controller.dart';
 import '../controllers/inventory_controller.dart';
+import '../../../../core/widgets/edit_pin_guard.dart';
 
 class AddEditProductScreen extends ConsumerStatefulWidget {
   final String? productId;
@@ -357,7 +358,7 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
       }
     });
 
-    return Scaffold(
+    final scaffold = Scaffold(
       backgroundColor: context.appBackground,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
@@ -690,6 +691,11 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
         ],
       ),
     );
+
+    if (isEditing) {
+      return EditPinGuard(child: scaffold);
+    }
+    return scaffold;
   }
 
   Widget _buildWireframeInput({

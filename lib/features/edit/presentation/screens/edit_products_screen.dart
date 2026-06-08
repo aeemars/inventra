@@ -9,6 +9,7 @@ import '../../../../core/extensions/theme_ext.dart';
 import '../../../auth/presentation/controllers/auth_controller.dart';
 import '../../../inventory/domain/entities/product.dart';
 import '../../../inventory/presentation/controllers/inventory_controller.dart';
+import '../../../../core/widgets/edit_pin_guard.dart';
 
 class EditProductsScreen extends ConsumerStatefulWidget {
   const EditProductsScreen({super.key});
@@ -108,8 +109,9 @@ class _EditProductsScreenState extends ConsumerState<EditProductsScreen> {
   Widget build(BuildContext context) {
     final productsAsync = ref.watch(productsProvider);
 
-    return Scaffold(
-      backgroundColor: context.appBackground,
+    return EditPinGuard(
+      child: Scaffold(
+        backgroundColor: context.appBackground,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -265,8 +267,9 @@ class _EditProductsScreenState extends ConsumerState<EditProductsScreen> {
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 }
 
 class _BarcodeSearchScannerScreen extends StatefulWidget {

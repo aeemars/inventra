@@ -8,7 +8,7 @@ import '../../../../core/extensions/theme_ext.dart';
 import '../../../../core/utils/validators.dart';
 import '../../../../core/widgets/app_button.dart';
 import '../../../../core/widgets/app_text_field.dart';
-import '../../domain/entities/app_user.dart';
+
 import '../controllers/auth_controller.dart';
 
 /// Registration screen matching Figma: "Join ShopManager",
@@ -22,7 +22,7 @@ class RegisterScreen extends ConsumerStatefulWidget {
 
 class _RegisterScreenState extends ConsumerState<RegisterScreen>
     with SingleTickerProviderStateMixin {
-  static const _signupRoles = [UserRole.admin, UserRole.sales];
+
 
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
@@ -30,7 +30,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
   final _shopNameController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
-  UserRole _selectedRole = UserRole.admin;
+
 
   late final AnimationController _ctrl;
   late final Animation<Offset> _slideAnim;
@@ -68,7 +68,6 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
           password: _passwordController.text,
           displayName: _nameController.text.trim(),
           shopName: _shopNameController.text.trim(),
-          role: _selectedRole,
         );
 
     if (success && mounted) {
@@ -240,69 +239,6 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
                                       ),
                                     ),
                                   ),
-                                  // Account Type Label
-                                  Text(
-                                    'Account Type',
-                                    style: AppTypography.labelLarge.copyWith(
-                                      color: context.appTextSecondary,
-                                    ),
-                                  ),
-                                  const SizedBox(height: AppSizes.md),
-                                  // Account Type Selector
-                                  Row(
-                                    children: _signupRoles.map((role) {
-                                      final isSelected = _selectedRole == role;
-                                      return Expanded(
-                                        child: GestureDetector(
-                                          onTap: () => setState(() => _selectedRole = role),
-                                          child: AnimatedContainer(
-                                            duration: const Duration(milliseconds: 200),
-                                            margin: const EdgeInsets.symmetric(horizontal: 4),
-                                            padding: const EdgeInsets.symmetric(vertical: 14),
-                                            decoration: BoxDecoration(
-                                              color: isSelected
-                                                  ? AppColors.primarySurface
-                                                  : context.appInputFill,
-                                              borderRadius:
-                                                  BorderRadius.circular(AppSizes.radiusMd),
-                                              border: Border.all(
-                                                color: isSelected
-                                                    ? AppColors.primary
-                                                    : Colors.transparent,
-                                                width: 1.5,
-                                              ),
-                                            ),
-                                            child: Column(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                Icon(
-                                                  _roleIcon(role),
-                                                  color: isSelected
-                                                      ? AppColors.primary
-                                                      : context.appTextTertiary,
-                                                  size: 24,
-                                                ),
-                                                const SizedBox(height: 6),
-                                                Text(
-                                                  _signupRoleLabel(role),
-                                                  style: TextStyle(
-                                                    fontSize: 10,
-                                                    fontWeight: isSelected
-                                                        ? FontWeight.w600
-                                                        : FontWeight.w400,
-                                                    color: isSelected
-                                                        ? AppColors.primary
-                                                        : context.appTextSecondary,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        ),
-                                      );
-                                    }).toList(),
-                                  ),
-                                  const SizedBox(height: AppSizes.xxl),
 
                                   // Full Name
                                   AppTextField(
@@ -420,28 +356,5 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
     );
   }
 
-  IconData _roleIcon(UserRole role) {
-    switch (role) {
-      case UserRole.admin:
-        return Icons.admin_panel_settings_outlined;
-      case UserRole.sales:
-        return Icons.point_of_sale_rounded;
-      case UserRole.warehouse:
-        return Icons.warehouse_outlined;
-      case UserRole.manager:
-        return Icons.manage_accounts_outlined;
-    }
-  }
 
-  String _signupRoleLabel(UserRole role) {
-    switch (role) {
-      case UserRole.admin:
-        return 'Admin';
-      case UserRole.sales:
-        return 'Operator';
-      case UserRole.warehouse:
-      case UserRole.manager:
-        return role.displayName;
-    }
-  }
 }

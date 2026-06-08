@@ -20,7 +20,6 @@ abstract class AuthRepository {
     required String password,
     required String displayName,
     required String shopName,
-    required UserRole role,
   });
 
   /// Send password reset email
@@ -36,6 +35,8 @@ abstract class AuthRepository {
     String? phoneNumber,
     String? shopName,
     String? fcmToken,
+    String? editPin,
+    String? editPinRecoveryCode,
   });
 
   /// Upload a profile photo and return the download URL.

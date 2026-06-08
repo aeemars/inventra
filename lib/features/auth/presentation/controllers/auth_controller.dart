@@ -1,4 +1,5 @@
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart' as fb_auth;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
@@ -6,7 +7,6 @@ import '../../domain/entities/app_user.dart';
 import '../../domain/repositories/auth_repository.dart';
 import '../../data/repositories/auth_repository_impl.dart';
 import '../../../../core/errors/failures.dart';
-import '../../../../shared/providers/active_profile_provider.dart';
 
 // ── Repository Provider ──
 final authRepositoryProvider = Provider<AuthRepository>((ref) {
@@ -98,7 +98,6 @@ class AuthController extends StateNotifier<AuthState> {
     required String password,
     required String displayName,
     required String shopName,
-    required UserRole role,
   }) async {
     state = state.copyWith(isLoading: true, error: null, isSuccess: false);
     try {
@@ -107,7 +106,6 @@ class AuthController extends StateNotifier<AuthState> {
         password: password,
         displayName: displayName,
         shopName: shopName,
-        role: role,
       );
       state = state.copyWith(isLoading: false, isSuccess: true);
       return true;
@@ -142,7 +140,6 @@ class AuthController extends StateNotifier<AuthState> {
   }
 
   Future<void> signOut() async {
-    ref.read(activeProfileProvider.notifier).clear();
     await _repository.signOut();
     state = AuthState.initial;
   }
@@ -199,6 +196,57 @@ class AuthController extends StateNotifier<AuthState> {
     }
   }
 
+  Future<bool> verifyPassword(String password) async {
+    state = state.copyWith(isLoading: true, error: null, isSuccess: false);
+    try {
+      final email = ref.read(currentUserProvider)?.email;
+      if (email == null) throw const AuthFailure(message: 'User email not found');
+
+      final fbUser = fb_auth.FirebaseAuth.instance.currentUser;
+      if (fbUser == null) {
+        throw const AuthFailure(message: 'Firebase user session not found');
+      }
+
+      final credential = fb_auth.EmailAuthProvider.credential(
+        email: email,
+        password: password,
+      );
+      await fbUser.reauthenticateWithCredential(credential);
+      state = state.copyWith(isLoading: false, isSuccess: true);
+      return true;
+    } on fb_auth.FirebaseAuthException catch (e) {
+      state = state.copyWith(
+          isLoading: false, error: e.message ?? 'Verification failed');
+      return false;
+    } catch (e) {
+      state =
+          state.copyWith(isLoading: false, error: 'Verification failed: $e');
+      return false;
+    }
+  }
+
+  Future<bool> setEditPin(String pin, String recoveryCode) async {
+    state = state.copyWith(isLoading: true, error: null, isSuccess: false);
+    try {
+      await _repository.updateProfile(
+        editPin: pin,
+        editPinRecoveryCode: recoveryCode,
+      );
+      state = state.copyWith(
+          isLoading: false,
+          isSuccess: true,
+          successMessage: 'Edit PIN updated');
+      return true;
+    } on Failure catch (e) {
+      state = state.copyWith(isLoading: false, error: e.message);
+      return false;
+    } catch (e) {
+      state = state.copyWith(
+          isLoading: false, error: 'Failed to save Edit PIN: $e');
+      return false;
+    }
+  }
+
   void clearError() {
     state = state.copyWith(error: null);
   }
@@ -229,7 +277,6 @@ class _UnavailableAuthRepository implements AuthRepository {
     required String password,
     required String displayName,
     required String shopName,
-    required UserRole role,
   }) {
     throw AuthFailure(message: message, code: 'auth-unavailable');
   }
@@ -249,6 +296,8 @@ class _UnavailableAuthRepository implements AuthRepository {
     String? phoneNumber,
     String? shopName,
     String? fcmToken,
+    String? editPin,
+    String? editPinRecoveryCode,
   }) {
     throw AuthFailure(message: message, code: 'auth-unavailable');
   }
