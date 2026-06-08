@@ -34,13 +34,19 @@ Future<void> bootstrap() async {
     );
 
     // App Check must be active before auth/database calls.
-    await FirebaseAppCheck.instance.activate(
-      providerAndroid: kDebugMode
-          ? (debugAppCheckToken.isEmpty
-              ? const AndroidDebugProvider()
-              : const AndroidDebugProvider(debugToken: debugAppCheckToken))
-          : const AndroidPlayIntegrityProvider(),
-    );
+    // Wrapped in try-catch: Play Integrity will fail for sideloaded APKs
+    // that are not distributed via Google Play Store.
+    try {
+      await FirebaseAppCheck.instance.activate(
+        providerAndroid: kDebugMode
+            ? (debugAppCheckToken.isEmpty
+                ? const AndroidDebugProvider()
+                : const AndroidDebugProvider(debugToken: debugAppCheckToken))
+            : const AndroidPlayIntegrityProvider(),
+      );
+    } catch (e) {
+      debugPrint('⚠️ App Check activation failed (non-fatal): $e');
+    }
   }
 
   // Hive (local storage)
