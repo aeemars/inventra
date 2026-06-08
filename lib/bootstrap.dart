@@ -8,7 +8,6 @@ import 'core/cache/hive_adapters.dart';
 import 'core/notifications/local_notification_service.dart';
 import 'firebase_options.dart';
 
-/// Initialize Firebase, Hive, and system UI
 Future<void> bootstrap() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -17,43 +16,59 @@ Future<void> bootstrap() async {
     DeviceOrientation.portraitDown,
   ]);
 
-  // Firebase
+  // ── Firebase ──
   if (defaultTargetPlatform == TargetPlatform.linux) {
-    debugPrint(
-      'Firebase initialization is skipped on Linux desktop for this setup. '
-      'Use a supported target (Android/iOS/Web/macOS/Windows) or add Linux-specific Firebase support if needed.',
-    );
+    debugPrint('Firebase initialization skipped on Linux.');
   } else {
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
+    try {
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      ).timeout(const Duration(seconds: 10));
+    } catch (e) {
+      debugPrint('⚠️ Firebase init failed: $e');
+    }
 
+    // ── App Check ──
+    // AndroidPlayIntegrityProvider hangs indefinitely on sideloaded APKs
+    // (not installed via Play Store). The 6-second timeout forces it to
+    // give up so the rest of the app can continue loading.
     const debugAppCheckToken = String.fromEnvironment(
       'FIREBASE_APP_CHECK_DEBUG_TOKEN',
       defaultValue: '',
     );
 
-    // App Check must be active before auth/database calls.
-    // Wrapped in try-catch: Play Integrity will fail for sideloaded APKs
-    // that are not distributed via Google Play Store.
     try {
-      await FirebaseAppCheck.instance.activate(
-        providerAndroid: kDebugMode
-            ? (debugAppCheckToken.isEmpty
-                ? const AndroidDebugProvider()
-                : const AndroidDebugProvider(debugToken: debugAppCheckToken))
-            : const AndroidPlayIntegrityProvider(),
-      );
+      await FirebaseAppCheck.instance
+          .activate(
+            providerAndroid: kDebugMode
+                ? (debugAppCheckToken.isEmpty
+                    ? const AndroidDebugProvider()
+                    : AndroidDebugProvider(debugToken: debugAppCheckToken))
+                : const AndroidPlayIntegrityProvider(),
+          )
+          .timeout(
+            const Duration(seconds: 6),
+            onTimeout: () => debugPrint(
+              '⚠️ App Check timed out — APK may be sideloaded or Play Integrity '
+              'is unavailable. Continuing without attestation.',
+            ),
+          );
     } catch (e) {
       debugPrint('⚠️ App Check activation failed (non-fatal): $e');
     }
   }
 
-  // Hive (local storage)
-  await Hive.initFlutter();
-  await Hive.openBox<dynamic>('app_prefs');
-  registerHiveAdapters();
+  // ── Hive ──
+  try {
+    await Hive.initFlutter().timeout(const Duration(seconds: 5));
+    await Hive.openBox<dynamic>('app_prefs')
+        .timeout(const Duration(seconds: 5));
+    registerHiveAdapters();
+  } catch (e) {
+    debugPrint('⚠️ Hive init failed: $e');
+  }
 
+  // ── Local Notifications ──
   try {
     await LocalNotificationService.initialize()
         .timeout(const Duration(seconds: 5));
