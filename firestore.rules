@@ -1,8 +1,115 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} {
-      allow read, write: if request.auth != null;
+    
+    // ── Helper Functions ──
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+    
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+    
+    function userBelongsToShop(shopId) {
+      return isSignedIn() && (
+        getUserData().shopId == shopId
+      );
+    }
+
+    // ── Users Collection ──
+    match /users/{uid} {
+      allow get: if isOwner(uid);
+      allow list: if false; // Block scanning profiles
+      allow create: if isOwner(uid) 
+        && request.resource.data.email is string
+        && request.resource.data.displayName is string
+        && request.resource.data.displayName.size() < 100;
+      allow update: if isOwner(uid)
+        && (request.resource.data.displayName is string && request.resource.data.displayName.size() < 100)
+        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['email', 'createdAt']));
+      allow delete: if false;
+    }
+
+    // ── Shops Collection & Sub-collections ──
+    match /shops/{shopId} {
+      allow get: if isSignedIn() && userBelongsToShop(shopId);
+      allow list: if false;
+      allow create: if isSignedIn() 
+        && request.resource.data.name is string 
+        && request.resource.data.name.size() < 100
+        && request.resource.data.ownerId == request.auth.uid;
+      allow update: if isSignedIn() && userBelongsToShop(shopId)
+        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['ownerId', 'createdAt']));
+      allow delete: if false;
+
+      // Products Subcollection
+      match /products/{productId} {
+        allow read: if isSignedIn() && userBelongsToShop(shopId);
+        allow create: if isSignedIn() && userBelongsToShop(shopId)
+          && request.resource.data.name is string
+          && request.resource.data.name.size() < 150
+          && request.resource.data.sellingPrice is number
+          && request.resource.data.sellingPrice >= 0;
+        allow update: if isSignedIn() && userBelongsToShop(shopId)
+          && request.resource.data.name is string
+          && request.resource.data.name.size() < 150
+          && request.resource.data.sellingPrice is number
+          && request.resource.data.sellingPrice >= 0;
+        allow delete: if isSignedIn() && userBelongsToShop(shopId);
+      }
+
+      // Categories Subcollection
+      match /categories/{categoryId} {
+        allow read: if isSignedIn() && userBelongsToShop(shopId);
+        allow write: if isSignedIn() && userBelongsToShop(shopId);
+      }
+
+      // Transactions Subcollection
+      match /transactions/{transactionId} {
+        allow read: if isSignedIn() && userBelongsToShop(shopId);
+        allow write: if isSignedIn() && userBelongsToShop(shopId);
+      }
+
+      // Stock Movements Subcollection
+      match /stock_movements/{movementId} {
+        allow read: if isSignedIn() && userBelongsToShop(shopId);
+        allow write: if isSignedIn() && userBelongsToShop(shopId);
+      }
+
+      // Scan History Subcollection
+      match /scan_history/{scanId} {
+        allow read: if isSignedIn() && userBelongsToShop(shopId);
+        allow write: if isSignedIn() && userBelongsToShop(shopId);
+      }
+
+      // Notifications Subcollection
+      match /notifications/{notificationId} {
+        allow read: if isSignedIn() && userBelongsToShop(shopId);
+        allow write: if isSignedIn() && userBelongsToShop(shopId);
+      }
+
+      // Analytics Snapshots Subcollection
+      match /analytics_snapshots/{dateKey} {
+        allow read: if isSignedIn() && userBelongsToShop(shopId);
+        allow write: if isSignedIn() && userBelongsToShop(shopId);
+      }
+
+      // In Demand Subcollection
+      match /in_demand/{demandId} {
+        allow read: if isSignedIn() && userBelongsToShop(shopId);
+        allow write: if isSignedIn() && userBelongsToShop(shopId);
+      }
+
+      // Settings Subcollection
+      match /settings/{docId} {
+        allow read: if isSignedIn() && userBelongsToShop(shopId);
+        allow write: if isSignedIn() && (userBelongsToShop(shopId) || request.resource.data.updatedBy == request.auth.uid);
+      }
     }
   }
 }
