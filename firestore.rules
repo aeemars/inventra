@@ -1,8 +1,114 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} {
-      allow read, write: if true;
+    
+    // ── Helper Functions ──
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+    
+    function isShopMember(shopId) {
+      return isAuthenticated() && (
+        getUserData().shopId == shopId || 
+        // Fallback for batch creation where user and shop are created together
+        (request.resource.data != null && request.resource.data.shopId == shopId)
+      );
+    }
+    
+    function hasRole(roleList) {
+      return getUserData().role in roleList;
+    }
+
+    // ── Users Collection ──
+    match /users/{userId} {
+      allow read: if isAuthenticated() && (request.auth.uid == userId || getUserData().shopId == resource.data.shopId);
+      allow create: if isAuthenticated() && request.auth.uid == userId
+                    && request.resource.data.displayName is string
+                    && request.resource.data.displayName.size() <= 100
+                    && request.resource.data.email is string
+                    && request.resource.data.email.size() <= 100;
+      allow update: if isAuthenticated() && request.auth.uid == userId
+                    && (!('displayName' in request.resource.data.keys()) || (request.resource.data.displayName is string && request.resource.data.displayName.size() <= 100))
+                    && (!('role' in request.resource.data.keys()) || request.resource.data.role == resource.data.role)
+                    && (!('shopId' in request.resource.data.keys()) || request.resource.data.shopId == resource.data.shopId);
+      allow delete: if false;
+    }
+
+    // ── Shops Collection ──
+    match /shops/{shopId} {
+      allow read: if isAuthenticated() && (resource.data.ownerId == request.auth.uid || getUserData().shopId == shopId);
+      allow create: if isAuthenticated() && request.resource.data.ownerId == request.auth.uid
+                    && request.resource.data.name is string
+                    && request.resource.data.name.size() <= 100;
+      allow update: if isAuthenticated() && (resource.data.ownerId == request.auth.uid || (getUserData().shopId == shopId && getUserData().role == 'admin'))
+                    && (!('ownerId' in request.resource.data.keys()) || request.resource.data.ownerId == resource.data.ownerId)
+                    && (!('name' in request.resource.data.keys()) || (request.resource.data.name is string && request.resource.data.name.size() <= 100));
+      allow delete: if false;
+
+      // ── Shop Config Settings ──
+      match /settings/{settingsId} {
+        allow read: if isAuthenticated() && (get(/databases/$(database)/documents/shops/$(shopId)).data.ownerId == request.auth.uid || getUserData().shopId == shopId);
+        allow create: if isAuthenticated() && (getAfter(/databases/$(database)/documents/shops/$(shopId)).data.ownerId == request.auth.uid);
+        allow update: if isAuthenticated() && (get(/databases/$(database)/documents/shops/$(shopId)).data.ownerId == request.auth.uid || (getUserData().shopId == shopId && getUserData().role == 'admin'));
+        allow delete: if false;
+      }
+
+      // ── Products Sub-collection ──
+      match /products/{productId} {
+        allow read: if isAuthenticated() && getUserData().shopId == shopId;
+        allow create, update: if isAuthenticated() && getUserData().shopId == shopId 
+                              && (getUserData().role == 'admin' || getUserData().role == 'manager' || getUserData().role == 'warehouse')
+                              && request.resource.data.name is string
+                              && request.resource.data.name.size() <= 200;
+        allow delete: if isAuthenticated() && getUserData().shopId == shopId && (getUserData().role == 'admin' || getUserData().role == 'manager');
+      }
+
+      // ── Categories Sub-collection ──
+      match /categories/{categoryId} {
+        allow read: if isAuthenticated() && getUserData().shopId == shopId;
+        allow create, update: if isAuthenticated() && getUserData().shopId == shopId 
+                              && (getUserData().role == 'admin' || getUserData().role == 'manager' || getUserData().role == 'warehouse')
+                              && request.resource.data.name is string
+                              && request.resource.data.name.size() <= 100;
+        allow delete: if isAuthenticated() && getUserData().shopId == shopId && (getUserData().role == 'admin' || getUserData().role == 'manager');
+      }
+
+      // ── Transactions Sub-collection ──
+      match /transactions/{transactionId} {
+        allow read: if isAuthenticated() && getUserData().shopId == shopId;
+        allow create: if isAuthenticated() && getUserData().shopId == shopId;
+        allow update, delete: if false;
+      }
+
+      // ── Stock Movements Sub-collection ──
+      match /stock_movements/{movementId} {
+        allow read: if isAuthenticated() && getUserData().shopId == shopId;
+        allow create: if isAuthenticated() && getUserData().shopId == shopId;
+        allow update, delete: if false;
+      }
+
+      // ── Scan History Sub-collection ──
+      match /scan_history/{scanId} {
+        allow read: if isAuthenticated() && getUserData().shopId == shopId;
+        allow create: if isAuthenticated() && getUserData().shopId == shopId;
+        allow update, delete: if false;
+      }
+
+      // ── Notifications Sub-collection ──
+      match /notifications/{notificationId} {
+        allow read, write: if isAuthenticated() && getUserData().shopId == shopId;
+      }
+
+      // ── Analytics Snapshots Sub-collection ──
+      match /analytics_snapshots/{dateKey} {
+        allow read: if isAuthenticated() && getUserData().shopId == shopId;
+        allow create, update: if isAuthenticated() && getUserData().shopId == shopId && (getUserData().role == 'admin' || getUserData().role == 'manager');
+        allow delete: if false;
+      }
     }
   }
 }
