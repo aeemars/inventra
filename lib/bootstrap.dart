@@ -54,5 +54,10 @@ Future<void> bootstrap() async {
   await Hive.openBox<dynamic>('app_prefs');
   registerHiveAdapters();
 
-  await LocalNotificationService.initialize();
+  try {
+    await LocalNotificationService.initialize()
+        .timeout(const Duration(seconds: 5));
+  } catch (e) {
+    debugPrint('⚠️ Notification init failed (non-fatal): $e');
+  }
 }
