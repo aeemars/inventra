@@ -14,18 +14,22 @@ service cloud.firestore {
     function isShopMember(shopId) {
       return isAuthenticated() && (
         getUserData().shopId == shopId || 
+        ('profiles' in getUserData() && getUserData().profiles.any(p, p.shopId == shopId)) ||
         // Fallback for batch creation where user and shop are created together
         (request.resource.data != null && request.resource.data.shopId == shopId)
       );
     }
     
-    function hasRole(roleList) {
-      return getUserData().role in roleList;
+    function hasShopRole(shopId, roleList) {
+      return isAuthenticated() && (
+        (getUserData().shopId == shopId && getUserData().role in roleList) ||
+        ('profiles' in getUserData() && getUserData().profiles.any(p, p.shopId == shopId && p.role in roleList))
+      );
     }
 
     // ── Users Collection ──
     match /users/{userId} {
-      allow read: if isAuthenticated() && (request.auth.uid == userId || getUserData().shopId == resource.data.shopId);
+      allow read: if isAuthenticated() && (request.auth.uid == userId || isShopMember(resource.data.shopId));
       allow create: if isAuthenticated() && request.auth.uid == userId
                     && request.resource.data.displayName is string
                     && request.resource.data.displayName.size() <= 100
@@ -34,79 +38,78 @@ service cloud.firestore {
       allow update: if isAuthenticated() && request.auth.uid == userId
                     && (!('displayName' in request.resource.data.keys()) || (request.resource.data.displayName is string && request.resource.data.displayName.size() <= 100))
                     && (!('role' in request.resource.data.keys()) || request.resource.data.role == resource.data.role)
-                    && (!('shopId' in request.resource.data.keys()) || request.resource.data.shopId == resource.data.shopId);
+                    && (!('shopId' in request.resource.data.keys()) || request.resource.data.shopId == resource.data.shopId)
+                    && (!('profiles' in request.resource.data.keys()) || request.resource.data.profiles.all(p, p.shopId == null || get(/databases/$(database)/documents/shops/$(p.shopId)).data.ownerId == request.auth.uid));
       allow delete: if false;
     }
 
     // ── Shops Collection ──
     match /shops/{shopId} {
-      allow read: if isAuthenticated() && (resource.data.ownerId == request.auth.uid || getUserData().shopId == shopId);
+      allow read: if isAuthenticated() && (resource.data.ownerId == request.auth.uid || isShopMember(shopId));
       allow create: if isAuthenticated() && request.resource.data.ownerId == request.auth.uid
                     && request.resource.data.name is string
                     && request.resource.data.name.size() <= 100;
-      allow update: if isAuthenticated() && (resource.data.ownerId == request.auth.uid || (getUserData().shopId == shopId && getUserData().role == 'admin'))
+      allow update: if isAuthenticated() && (resource.data.ownerId == request.auth.uid || hasShopRole(shopId, ['admin']))
                     && (!('ownerId' in request.resource.data.keys()) || request.resource.data.ownerId == resource.data.ownerId)
                     && (!('name' in request.resource.data.keys()) || (request.resource.data.name is string && request.resource.data.name.size() <= 100));
       allow delete: if false;
 
       // ── Shop Config Settings ──
       match /settings/{settingsId} {
-        allow read: if isAuthenticated() && (get(/databases/$(database)/documents/shops/$(shopId)).data.ownerId == request.auth.uid || getUserData().shopId == shopId);
+        allow read: if isAuthenticated() && (get(/databases/$(database)/documents/shops/$(shopId)).data.ownerId == request.auth.uid || isShopMember(shopId));
         allow create: if isAuthenticated() && (getAfter(/databases/$(database)/documents/shops/$(shopId)).data.ownerId == request.auth.uid);
-        allow update: if isAuthenticated() && (get(/databases/$(database)/documents/shops/$(shopId)).data.ownerId == request.auth.uid || (getUserData().shopId == shopId && getUserData().role == 'admin'));
+        allow update: if isAuthenticated() && (get(/databases/$(database)/documents/shops/$(shopId)).data.ownerId == request.auth.uid || hasShopRole(shopId, ['admin']));
         allow delete: if false;
       }
 
       // ── Products Sub-collection ──
       match /products/{productId} {
-        allow read: if isAuthenticated() && getUserData().shopId == shopId;
-        allow create, update: if isAuthenticated() && getUserData().shopId == shopId 
-                              && (getUserData().role == 'admin' || getUserData().role == 'manager' || getUserData().role == 'warehouse')
+        allow read: if isShopMember(shopId);
+        allow create, update: if hasShopRole(shopId, ['admin', 'manager', 'warehouse'])
                               && request.resource.data.name is string
                               && request.resource.data.name.size() <= 200;
-        allow delete: if isAuthenticated() && getUserData().shopId == shopId && (getUserData().role == 'admin' || getUserData().role == 'manager');
+        allow delete: if hasShopRole(shopId, ['admin', 'manager']);
       }
 
       // ── Categories Sub-collection ──
       match /categories/{categoryId} {
-        allow read: if isAuthenticated() && getUserData().shopId == shopId;
-        allow create, update: if isAuthenticated() && getUserData().shopId == shopId 
-                              && (getUserData().role == 'admin' || getUserData().role == 'manager' || getUserData().role == 'warehouse')
+        allow read: if isShopMember(shopId);
+        allow create, update: if hasShopRole(shopId, ['admin', 'manager', 'warehouse'])
                               && request.resource.data.name is string
                               && request.resource.data.name.size() <= 100;
-        allow delete: if isAuthenticated() && getUserData().shopId == shopId && (getUserData().role == 'admin' || getUserData().role == 'manager');
+        allow delete: if hasShopRole(shopId, ['admin', 'manager']);
       }
 
       // ── Transactions Sub-collection ──
       match /transactions/{transactionId} {
-        allow read: if isAuthenticated() && getUserData().shopId == shopId;
-        allow create: if isAuthenticated() && getUserData().shopId == shopId;
+        allow read: if isShopMember(shopId);
+        allow create: if isShopMember(shopId);
         allow update, delete: if false;
       }
 
       // ── Stock Movements Sub-collection ──
       match /stock_movements/{movementId} {
-        allow read: if isAuthenticated() && getUserData().shopId == shopId;
-        allow create: if isAuthenticated() && getUserData().shopId == shopId;
+        allow read: if isShopMember(shopId);
+        allow create: if isShopMember(shopId);
         allow update, delete: if false;
       }
 
       // ── Scan History Sub-collection ──
       match /scan_history/{scanId} {
-        allow read: if isAuthenticated() && getUserData().shopId == shopId;
-        allow create: if isAuthenticated() && getUserData().shopId == shopId;
+        allow read: if isShopMember(shopId);
+        allow create: if isShopMember(shopId);
         allow update, delete: if false;
       }
 
       // ── Notifications Sub-collection ──
       match /notifications/{notificationId} {
-        allow read, write: if isAuthenticated() && getUserData().shopId == shopId;
+        allow read, write: if isShopMember(shopId);
       }
 
       // ── Analytics Snapshots Sub-collection ──
       match /analytics_snapshots/{dateKey} {
-        allow read: if isAuthenticated() && getUserData().shopId == shopId;
-        allow create, update: if isAuthenticated() && getUserData().shopId == shopId && (getUserData().role == 'admin' || getUserData().role == 'manager');
+        allow read: if isShopMember(shopId);
+        allow create, update: if hasShopRole(shopId, ['admin', 'manager']);
         allow delete: if false;
       }
     }
