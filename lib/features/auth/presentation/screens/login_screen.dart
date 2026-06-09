@@ -8,6 +8,7 @@ import '../../../../core/extensions/theme_ext.dart';
 import '../../../../core/utils/validators.dart';
 import '../../../../core/widgets/app_button.dart';
 import '../../../../core/widgets/app_text_field.dart';
+import '../../../../core/widgets/app_logo.dart';
 import '../controllers/auth_controller.dart';
 
 /// Login screen matching Figma: green shield logo, "Welcome Back",
@@ -136,31 +137,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Container(
-                          width: 80,
-                          height: 80,
-                          decoration: BoxDecoration(
-                            color: AppColors.white,
-                            borderRadius: BorderRadius.circular(22),
-                            boxShadow: [
-                              BoxShadow(
-                                color: AppColors.primaryDark.withValues(alpha: 0.45),
-                                blurRadius: 28,
-                                offset: const Offset(0, 10),
-                              ),
-                              BoxShadow(
-                                color: AppColors.white.withValues(alpha: 0.15),
-                                blurRadius: 8,
-                                offset: const Offset(0, -2),
-                              ),
-                            ],
-                          ),
-                          child: const Icon(
-                            Icons.inventory_2_rounded,
-                            color: AppColors.primary,
-                            size: 40,
-                          ),
-                        ),
+                        const AppLogo(size: 80),
                         const SizedBox(height: 14),
                         const Text(
                           'Welcome Back',

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_typography.dart';
+import '../../../../core/widgets/app_logo.dart';
 import '../../../../core/notifications/local_notification_service.dart';
 import '../controllers/auth_controller.dart';
 
@@ -169,32 +170,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                           position: _logoSlide,
                           child: ScaleTransition(
                             scale: _logoScale,
-                            child: Container(
-                              width: 100,
-                              height: 100,
-                              decoration: BoxDecoration(
-                                color: AppColors.white,
-                                borderRadius: BorderRadius.circular(28),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: AppColors.primaryDark.withValues(alpha: 0.5),
-                                    blurRadius: 32,
-                                    spreadRadius: 4,
-                                    offset: const Offset(0, 12),
-                                  ),
-                                  BoxShadow(
-                                    color: AppColors.white.withValues(alpha: 0.15),
-                                    blurRadius: 8,
-                                    offset: const Offset(0, -2),
-                                  ),
-                                ],
-                              ),
-                              child: const Icon(
-                                Icons.inventory_2_rounded,
-                                color: AppColors.primary,
-                                size: 52,
-                              ),
-                            ),
+                            child: const AppLogo(size: 100),
                           ),
                         ),
                       ),
