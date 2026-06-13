@@ -170,21 +170,51 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen>
     });
 
     if (selectedIntent == ScanIntent.addProduct) {
-      // Save scan history (unmatched — we're creating a new product)
-      ref.read(scannerControllerProvider.notifier).saveScanEntry(
-            barcodeValue: barcode,
-            scanIntent: 'addProduct',
-          );
-
-      if (!mounted) {
+      final shopId = ref.read(currentShopIdProvider);
+      if (shopId == null) {
         setState(() => _isProcessing = false);
         return;
       }
-      ref
-          .read(scannerRouteAccessProvider.notifier)
-          .grant(ScannerProtectedRoute.addProduct);
-      context.push('/inventory/add?barcode=$barcode');
-      setState(() => _isProcessing = false);
+
+      try {
+        final product = await ref
+            .read(productRepositoryProvider)
+            .findByBarcode(shopId, barcode);
+
+        if (!mounted) {
+          _isProcessing = false;
+          return;
+        }
+
+        ref.read(scannerControllerProvider.notifier).saveScanEntry(
+              barcodeValue: barcode,
+              scanIntent: 'addProduct',
+              matchedProductId: product?.id,
+              matchedProductName: product?.name,
+            );
+
+        if (product != null) {
+          // Product exists — show restock sheet; do NOT navigate to add screen
+          _showAddUnitsSheet(product);
+        } else {
+          // Product not found — navigate to add screen to create a new one
+          ref
+              .read(scannerRouteAccessProvider.notifier)
+              .grant(ScannerProtectedRoute.addProduct);
+          context.push('/inventory/add?barcode=$barcode');
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Lookup error: $e'),
+              backgroundColor: AppColors.error,
+            ),
+          );
+        }
+      } finally {
+        if (mounted) setState(() => _isProcessing = false);
+      }
       return;
     }
 
@@ -305,6 +335,139 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen>
       if (mounted) {
         setState(() => _lastScannedCode = null);
       }
+    });
+  }
+
+  void _showAddUnitsSheet(Product product) {
+    int qty = 1;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) => Padding(
+          padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+          child: Container(
+            padding: const EdgeInsets.all(AppSizes.xxl),
+            decoration: BoxDecoration(
+              color: ctx.appSurfaceRaised,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Drag handle
+                Container(
+                  width: 40, height: 4,
+                  decoration: BoxDecoration(
+                    color: ctx.appDivider,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(height: AppSizes.xl),
+                // Product found badge
+                Container(
+                  width: 56, height: 56,
+                  decoration: BoxDecoration(
+                    color: AppColors.success.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: const Icon(Icons.inventory_2_rounded,
+                      color: AppColors.success, size: 28),
+                ),
+                const SizedBox(height: AppSizes.md),
+                Text('Product Found',
+                    style: AppTypography.h4.copyWith(color: ctx.appTextPrimary)),
+                const SizedBox(height: AppSizes.sm),
+                Text(
+                  product.name,
+                  style: AppTypography.bodyMedium.copyWith(
+                      fontWeight: FontWeight.w600, color: AppColors.primary),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Current stock: ${product.quantity} ${product.unit}',
+                  style: AppTypography.bodySmall
+                      .copyWith(color: ctx.appTextSecondary),
+                ),
+                const SizedBox(height: AppSizes.xxl),
+                // Quantity selector
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    IconButton(
+                      onPressed: () {
+                        if (qty > 1) setSheetState(() => qty--);
+                      },
+                      icon: const Icon(Icons.remove_circle_outline_rounded),
+                      color: AppColors.primary,
+                      iconSize: 32,
+                    ),
+                    const SizedBox(width: AppSizes.lg),
+                    Text('$qty',
+                        style: AppTypography.h2.copyWith(
+                            color: ctx.appTextPrimary)),
+                    const SizedBox(width: AppSizes.lg),
+                    IconButton(
+                      onPressed: () => setSheetState(() => qty++),
+                      icon: const Icon(Icons.add_circle_outline_rounded),
+                      color: AppColors.primary,
+                      iconSize: 32,
+                    ),
+                  ],
+                ),
+                Text(
+                  'Units to add',
+                  style: AppTypography.bodySmall
+                      .copyWith(color: ctx.appTextTertiary),
+                ),
+                const SizedBox(height: AppSizes.xxl),
+                AppButton(
+                  label: 'Confirm Restock',
+                  icon: Icons.add_rounded,
+                  onPressed: () async {
+                    Navigator.pop(ctx);
+                    final success = await ref
+                        .read(inventoryControllerProvider.notifier)
+                        .adjustStock(
+                          product.id,
+                          qty,
+                          productName: product.name,
+                        );
+                    if (mounted) {
+                      _showResultSnackBar(
+                        success
+                            ? 'Added $qty ${product.unit} to ${product.name}'
+                            : 'Restock failed. Please try again.',
+                        success,
+                      );
+                      setState(() => _lastScannedCode = null);
+                    }
+                  },
+                ),
+                const SizedBox(height: AppSizes.md),
+                // Escape hatch: create a separate product entry anyway
+                AppButton(
+                  label: 'Add as New Product Instead',
+                  isOutlined: true,
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    ref
+                        .read(scannerRouteAccessProvider.notifier)
+                        .grant(ScannerProtectedRoute.addProduct);
+                    context.push(
+                        '/inventory/add?barcode=${product.barcode ?? product.sku}');
+                  },
+                ),
+                SizedBox(height: MediaQuery.of(ctx).padding.bottom + 16),
+              ],
+            ),
+          ),
+        ),
+      ),
+    ).whenComplete(() {
+      if (mounted) setState(() => _lastScannedCode = null);
     });
   }
 

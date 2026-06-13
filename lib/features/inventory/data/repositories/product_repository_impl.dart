@@ -48,37 +48,50 @@ class ProductRepositoryImpl implements ProductRepository {
   @override
   Future<Product?> findByBarcode(String shopId, String barcode) async {
     try {
-      final cleanedBarcode = _cleanLookup(barcode);
-      if (cleanedBarcode.isEmpty) return null;
+      final cleaned = _cleanLookup(barcode);
+      if (cleaned.isEmpty) return null;
 
-      // Search by barcode field first
-      var query = await _firestore
-          .collection(FirestorePaths.products(shopId))
-          .where('barcode', isEqualTo: cleanedBarcode)
-          .limit(1)
-          .get();
-
-      if (query.docs.isNotEmpty) {
-        return ProductModel.fromFirestore(query.docs.first).toEntity();
+      // Build all candidate values to check:
+      // EAN-13 (13 digits starting with 0) ↔ UPC-A (same 12 digits without leading 0)
+      final candidates = <String>{cleaned};
+      if (cleaned.length == 13 && cleaned.startsWith('0')) {
+        candidates.add(cleaned.substring(1)); // strip leading zero → UPC-A
+      }
+      if (cleaned.length == 12) {
+        candidates.add('0$cleaned'); // prepend zero → EAN-13
       }
 
-      // Fallback: search by SKU
-      query = await _firestore
-          .collection(FirestorePaths.products(shopId))
-          .where('sku', isEqualTo: cleanedBarcode)
-          .limit(1)
-          .get();
-
-      if (query.docs.isNotEmpty) {
-        return ProductModel.fromFirestore(query.docs.first).toEntity();
+      // 1. Search by barcode field for each candidate
+      for (final candidate in candidates) {
+        final q = await _firestore
+            .collection(FirestorePaths.products(shopId))
+            .where('barcode', isEqualTo: candidate)
+            .limit(1)
+            .get();
+        if (q.docs.isNotEmpty) {
+          return ProductModel.fromFirestore(q.docs.first).toEntity();
+        }
       }
 
-      // Last-resort fallback for formatting mismatches (spaces, hyphens, case).
-      final normalizedInput = _normalizedLookup(cleanedBarcode);
+      // 2. Search by sku field for each candidate
+      for (final candidate in candidates) {
+        final q = await _firestore
+            .collection(FirestorePaths.products(shopId))
+            .where('sku', isEqualTo: candidate)
+            .limit(1)
+            .get();
+        if (q.docs.isNotEmpty) {
+          return ProductModel.fromFirestore(q.docs.first).toEntity();
+        }
+      }
+
+      // 3. Last-resort: normalized full-collection scan
+      final normalizedInput = _normalizedLookup(cleaned);
       if (normalizedInput.isEmpty) return null;
 
-      final snapshot =
-          await _firestore.collection(FirestorePaths.products(shopId)).get();
+      final snapshot = await _firestore
+          .collection(FirestorePaths.products(shopId))
+          .get();
 
       for (final doc in snapshot.docs) {
         final model = ProductModel.fromFirestore(doc);

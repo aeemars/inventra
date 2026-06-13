@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_sizes.dart';
+import '../../../../core/constants/app_typography.dart';
 import '../../../../core/extensions/theme_ext.dart';
 import '../../../../core/widgets/app_card.dart';
 import '../../domain/entities/product.dart';
@@ -43,6 +44,7 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
   Timer? _upcDebounce;
   String? _dismissedBarcode;
   bool _masterDataExpanded = false;
+  bool _isLookingUp = false;
 
   bool get isEditing => widget.productId != null;
 
@@ -78,6 +80,7 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
     if (!isEditing && widget.initialBarcode != null) {
       _barcodeController.text = widget.initialBarcode!;
       _upcController.text = widget.initialBarcode!;
+      _isLookingUp = true; // guard against first-render flash
       _lookupBarcode(widget.initialBarcode!);
     }
     // Only activate for new products not coming from scanner
@@ -98,61 +101,64 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
     final shopId = ref.read(currentShopIdProvider);
     if (shopId == null) return;
 
-    final product = await ref
-        .read(productRepositoryProvider)
-        .findByBarcode(shopId, barcode);
+    try {
+      final product = await ref
+          .read(productRepositoryProvider)
+          .findByBarcode(shopId, barcode);
 
-    if (product != null && mounted) {
-      setState(() {
-        _existingProduct = product;
-        _nameController.text = product.name;
-        _costPriceController.text = product.costPrice.toString();
-        _sellingPriceController.text = product.sellingPrice.toString();
-        _reorderLevelController.text = product.reorderLevel.toString();
-        _unitController.text = product.unit;
-        _supplierController.text = product.supplier ?? '';
-        _descriptionController.text = product.description ?? '';
-        _categoryController.text = product.categoryName ?? product.categoryId ?? '';
-        _expiryController.text = _formatDateForInput(product.expiryDate);
-      });
+      if (product != null && mounted) {
+        setState(() {
+          _existingProduct = product;
+          _nameController.text = product.name;
+          _costPriceController.text = product.costPrice.toString();
+          _sellingPriceController.text = product.sellingPrice.toString();
+          _reorderLevelController.text = product.reorderLevel.toString();
+          _unitController.text = product.unit;
+          _supplierController.text = product.supplier ?? '';
+          _descriptionController.text = product.description ?? '';
+          _categoryController.text = product.categoryName ?? product.categoryId ?? '';
+          _expiryController.text = _formatDateForInput(product.expiryDate);
+        });
 
-      if (!isEditing && widget.initialBarcode == null && mounted) {
-        await showDialog<void>(
-          context: context,
-          barrierDismissible: false,
-          builder: (ctx) => AlertDialog(
-            title: const Text('Product already exists'),
-            content: Text(
-              '"${product.name}" is already in your inventory with '
-              '${product.quantity} ${product.unit} in stock.\n\n'
-              'How many units would you like to add?',
+        // Show dialog regardless of whether barcode came from scanner or manual entry
+        if (!isEditing && mounted) {
+          await showDialog<void>(
+            context: context,
+            barrierDismissible: false,
+            builder: (ctx) => AlertDialog(
+              title: const Text('Product already exists'),
+              content: Text(
+                '"${product.name}" is already in your inventory with '
+                '${product.quantity} ${product.unit} in stock.\n\n'
+                'How many units would you like to add?',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    setState(() {
+                      _existingProduct = null;
+                      _dismissedBarcode = barcode;
+                    });
+                    Navigator.pop(ctx);
+                  },
+                  child: const Text('Create new anyway'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    _nameController.text = product.name;
+                    setState(() {});
+                  },
+                  child: const Text('Add units'),
+                ),
+              ],
             ),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  // Dismiss and clear UPC to let user proceed as new product
-                  setState(() {
-                    _existingProduct = null;
-                    _dismissedBarcode = barcode;
-                  });
-                  Navigator.pop(ctx);
-                },
-                child: const Text('Create new anyway'),
-              ),
-              ElevatedButton(
-                onPressed: () {
-                  Navigator.pop(ctx);
-                  // Pre-populate name from existing product and switch to restock mode
-                  _nameController.text = product.name;
-                  setState(() {}); // rebuild to reflect _existingProduct
-                },
-                child: const Text('Add units'),
-              ),
-            ],
-          ),
-        );
-        return;
+          );
+        }
       }
+    } finally {
+      // Always clear the loading guard — even if product was not found
+      if (mounted) setState(() => _isLookingUp = false);
     }
   }
 
@@ -357,6 +363,26 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
         );
       }
     });
+
+    if (_isLookingUp) {
+      return Scaffold(
+        backgroundColor: context.appBackground,
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(color: AppColors.primary),
+              const SizedBox(height: AppSizes.md),
+              Text(
+                'Checking inventory...',
+                style: AppTypography.bodyMedium
+                    .copyWith(color: context.appTextSecondary),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
 
     final scaffold = Scaffold(
       backgroundColor: context.appBackground,
