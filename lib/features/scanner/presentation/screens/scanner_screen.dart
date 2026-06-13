@@ -340,6 +340,7 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen>
 
   void _showAddUnitsSheet(Product product) {
     int qty = 1;
+    final qtyController = TextEditingController(text: '1');
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -398,19 +399,50 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen>
                   children: [
                     IconButton(
                       onPressed: () {
-                        if (qty > 1) setSheetState(() => qty--);
+                        if (qty > 1) {
+                          setSheetState(() {
+                            qty--;
+                            qtyController.text = '$qty';
+                          });
+                        }
                       },
                       icon: const Icon(Icons.remove_circle_outline_rounded),
                       color: AppColors.primary,
                       iconSize: 32,
                     ),
-                    const SizedBox(width: AppSizes.lg),
-                    Text('$qty',
-                        style: AppTypography.h2.copyWith(
-                            color: ctx.appTextPrimary)),
-                    const SizedBox(width: AppSizes.lg),
+                    const SizedBox(width: AppSizes.md),
+                    SizedBox(
+                      width: 80,
+                      child: TextField(
+                        controller: qtyController,
+                        keyboardType: TextInputType.number,
+                        textAlign: TextAlign.center,
+                        style: AppTypography.h2.copyWith(color: ctx.appTextPrimary),
+                        decoration: const InputDecoration(
+                          border: InputBorder.none,
+                          contentPadding: EdgeInsets.zero,
+                          isDense: true,
+                        ),
+                        onChanged: (val) {
+                          final parsed = int.tryParse(val);
+                          if (parsed != null && parsed > 0) {
+                            setSheetState(() => qty = parsed);
+                          }
+                        },
+                        onTap: () => qtyController.selection = TextSelection(
+                          baseOffset: 0,
+                          extentOffset: qtyController.text.length,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: AppSizes.md),
                     IconButton(
-                      onPressed: () => setSheetState(() => qty++),
+                      onPressed: () {
+                        setSheetState(() {
+                          qty++;
+                          qtyController.text = '$qty';
+                        });
+                      },
                       icon: const Icon(Icons.add_circle_outline_rounded),
                       color: AppColors.primary,
                       iconSize: 32,
@@ -467,6 +499,7 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen>
         ),
       ),
     ).whenComplete(() {
+      qtyController.dispose();
       if (mounted) setState(() => _lastScannedCode = null);
     });
   }
