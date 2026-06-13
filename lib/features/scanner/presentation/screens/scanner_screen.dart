@@ -480,17 +480,32 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen>
                 ),
                 const SizedBox(height: AppSizes.md),
                 // Escape hatch: create a separate product entry anyway
-                AppButton(
-                  label: 'Add as New Product Instead',
-                  isOutlined: true,
-                  onPressed: () {
-                    Navigator.pop(ctx);
-                    ref
-                        .read(scannerRouteAccessProvider.notifier)
-                        .grant(ScannerProtectedRoute.addProduct);
-                    context.push(
-                        '/inventory/add?barcode=${product.barcode ?? product.sku}');
-                  },
+                SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: OutlinedButton(
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      ref
+                          .read(scannerRouteAccessProvider.notifier)
+                          .grant(ScannerProtectedRoute.addProduct);
+                      context.push(
+                          '/inventory/add?barcode=${product.barcode ?? product.sku}');
+                    },
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: ctx.appTextPrimary,
+                      side: BorderSide(color: ctx.appCardBorder),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(AppSizes.radiusMd),
+                      ),
+                    ),
+                    child: Text(
+                      'Add as New Product Instead',
+                      style: AppTypography.labelLarge.copyWith(
+                        color: ctx.appTextPrimary,
+                      ),
+                    ),
+                  ),
                 ),
                 SizedBox(height: MediaQuery.of(ctx).padding.bottom + 16),
               ],
