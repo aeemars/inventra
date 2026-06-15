@@ -67,6 +67,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         },
         builder: (_, state) => AddEditProductScreen(
           initialBarcode: state.uri.queryParameters['barcode'],
+          forceNew: state.uri.queryParameters['forceNew'] == 'true',
         ),
       ),
       GoRoute(

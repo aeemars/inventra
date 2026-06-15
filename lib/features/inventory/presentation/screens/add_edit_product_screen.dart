@@ -15,8 +15,14 @@ import '../../../../core/widgets/edit_pin_guard.dart';
 class AddEditProductScreen extends ConsumerStatefulWidget {
   final String? productId;
   final String? initialBarcode;
+  final bool forceNew;
 
-  const AddEditProductScreen({super.key, this.productId, this.initialBarcode});
+  const AddEditProductScreen({
+    super.key,
+    this.productId,
+    this.initialBarcode,
+    this.forceNew = false,
+  });
 
   @override
   ConsumerState<AddEditProductScreen> createState() =>
@@ -38,6 +44,9 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
   // New details fields matching wireframe
   final _categoryController = TextEditingController();
   final _expiryController = TextEditingController();
+
+  final _quantityController = TextEditingController(text: '1');
+  final _quantityFocusNode = FocusNode();
 
   int _quantity = 1;
   Product? _existingProduct;
@@ -77,6 +86,11 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
   @override
   void initState() {
     super.initState();
+    _quantityFocusNode.addListener(() {
+      if (!_quantityFocusNode.hasFocus) {
+        _quantityController.text = '$_quantity';
+      }
+    });
     if (!isEditing && widget.initialBarcode != null) {
       _barcodeController.text = widget.initialBarcode!;
       _upcController.text = widget.initialBarcode!;
@@ -95,69 +109,89 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
     _upcController.addListener(_onHeaderFieldsChanged);
   }
 
-  /// Look up an existing product by barcode and pre-populate fields if found.
   Future<void> _lookupBarcode(String barcode) async {
     if (barcode == _dismissedBarcode) return;
+
+    // ── Path A: user explicitly chose "Add as New Product Instead" ──
+    // Skip the duplicate check entirely — they've already acknowledged the duplicate.
+    if (widget.forceNew) {
+      _dismissedBarcode = barcode;
+      if (mounted) setState(() => _isLookingUp = false);
+      return;
+    }
+
     final shopId = ref.read(currentShopIdProvider);
-    if (shopId == null) return;
+    if (shopId == null) {
+      if (mounted) setState(() => _isLookingUp = false);
+      return;
+    }
 
     try {
       final product = await ref
           .read(productRepositoryProvider)
           .findByBarcode(shopId, barcode);
 
-      if (product != null && mounted) {
-        setState(() {
-          _existingProduct = product;
-          _nameController.text = product.name;
-          _costPriceController.text = product.costPrice.toString();
-          _sellingPriceController.text = product.sellingPrice.toString();
-          _reorderLevelController.text = product.reorderLevel.toString();
-          _unitController.text = product.unit;
-          _supplierController.text = product.supplier ?? '';
-          _descriptionController.text = product.description ?? '';
-          _categoryController.text = product.categoryName ?? product.categoryId ?? '';
-          _expiryController.text = _formatDateForInput(product.expiryDate);
-        });
+      if (product == null || !mounted) return;
 
-        // Show dialog regardless of whether barcode came from scanner or manual entry
-        if (!isEditing && mounted) {
-          await showDialog<void>(
-            context: context,
-            barrierDismissible: false,
-            builder: (ctx) => AlertDialog(
-              title: const Text('Product already exists'),
-              content: Text(
-                '"${product.name}" is already in your inventory with '
-                '${product.quantity} ${product.unit} in stock.\n\n'
-                'How many units would you like to add?',
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () {
-                    setState(() {
-                      _existingProduct = null;
-                      _dismissedBarcode = barcode;
-                    });
-                    Navigator.pop(ctx);
-                  },
-                  child: const Text('Create new anyway'),
-                ),
-                ElevatedButton(
-                  onPressed: () {
-                    Navigator.pop(ctx);
-                    _nameController.text = product.name;
-                    setState(() {});
-                  },
-                  child: const Text('Add units'),
-                ),
-              ],
+      // ── Path B: scanner-originated — STRICT pop, no form, no dialog ──
+      // The scanner's own lookup said "not found" (race/cache miss), but this
+      // fresher lookup found a duplicate. Pop immediately with the product so
+      // the scanner can show _showAddUnitsSheet instead. The add-edit form
+      // must never become visible in this case.
+      if (!isEditing && widget.initialBarcode != null) {
+        Navigator.pop(context, product);
+        return;
+      }
+
+      // ── Path C: manual entry via FAB — existing dialog behaviour ──
+      setState(() {
+        _existingProduct = product;
+        _nameController.text = product.name;
+        _costPriceController.text = product.costPrice.toString();
+        _sellingPriceController.text = product.sellingPrice.toString();
+        _reorderLevelController.text = product.reorderLevel.toString();
+        _unitController.text = product.unit;
+        _supplierController.text = product.supplier ?? '';
+        _descriptionController.text = product.description ?? '';
+        _categoryController.text = product.categoryName ?? product.categoryId ?? '';
+        _expiryController.text = _formatDateForInput(product.expiryDate);
+      });
+
+      if (mounted) {
+        await showDialog<void>(
+          context: context,
+          barrierDismissible: false,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Product already exists'),
+            content: Text(
+              '"${product.name}" is already in your inventory with '
+              '${product.quantity} ${product.unit} in stock.\n\n'
+              'How many units would you like to add?',
             ),
-          );
-        }
+            actions: [
+              TextButton(
+                onPressed: () {
+                  setState(() {
+                    _existingProduct = null;
+                    _dismissedBarcode = barcode;
+                  });
+                  Navigator.pop(ctx);
+                },
+                child: const Text('Create new anyway'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  _nameController.text = product.name;
+                  setState(() {});
+                },
+                child: const Text('Add units'),
+              ),
+            ],
+          ),
+        );
       }
     } finally {
-      // Always clear the loading guard — even if product was not found
       if (mounted) setState(() => _isLookingUp = false);
     }
   }
@@ -179,6 +213,7 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
         _costPriceController.text = product.costPrice.toString();
         _sellingPriceController.text = product.sellingPrice.toString();
         _quantity = product.quantity > 0 ? product.quantity : 1;
+        _quantityController.text = '$_quantity';
         _reorderLevelController.text = product.reorderLevel.toString();
         _unitController.text = product.unit;
         _supplierController.text = product.supplier ?? '';
@@ -207,6 +242,8 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
     _descriptionController.dispose();
     _categoryController.dispose();
     _expiryController.dispose();
+    _quantityController.dispose();
+    _quantityFocusNode.dispose();
     super.dispose();
   }
 
@@ -319,9 +356,18 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
     }
   }
 
-  void _incrementQty() => setState(() => _quantity++);
+  void _incrementQty() => setState(() {
+    _quantity++;
+    _quantityController.text = '$_quantity';
+  });
+
   void _decrementQty() {
-    if (_quantity > 1) setState(() => _quantity--);
+    if (_quantity > 1) {
+      setState(() {
+        _quantity--;
+        _quantityController.text = '$_quantity';
+      });
+    }
   }
 
   String _formatDateForInput(DateTime? date) {
@@ -544,18 +590,42 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
                             ),
                           ),
                           // Value text
-                          Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text('$_quantity',
+                          SizedBox(
+                            width: 90,
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                TextField(
+                                  controller: _quantityController,
+                                  focusNode: _quantityFocusNode,
+                                  keyboardType: TextInputType.number,
+                                  textAlign: TextAlign.center,
                                   style: TextStyle(
-                                      fontSize: 24,
-                                      color: context.appTextPrimary,
-                                      fontWeight: FontWeight.w800)),
-                              Text('units',
-                                  style: TextStyle(
-                                      fontSize: 12, color: context.appTextSecondary)),
-                            ],
+                                    fontSize: 24,
+                                    color: context.appTextPrimary,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                  decoration: const InputDecoration(
+                                    border: InputBorder.none,
+                                    contentPadding: EdgeInsets.zero,
+                                    isDense: true,
+                                  ),
+                                  onChanged: (val) {
+                                    final parsed = int.tryParse(val);
+                                    if (parsed != null && parsed > 0) {
+                                      setState(() => _quantity = parsed);
+                                    }
+                                  },
+                                  onTap: () => _quantityController.selection = TextSelection(
+                                    baseOffset: 0,
+                                    extentOffset: _quantityController.text.length,
+                                  ),
+                                ),
+                                Text('units',
+                                    style: TextStyle(
+                                        fontSize: 12, color: context.appTextSecondary)),
+                              ],
+                            ),
                           ),
                           // Plus button
                           GestureDetector(

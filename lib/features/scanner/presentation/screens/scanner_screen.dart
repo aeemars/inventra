@@ -197,11 +197,16 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen>
           // Product exists — show restock sheet; do NOT navigate to add screen
           _showAddUnitsSheet(product);
         } else {
-          // Product not found — navigate to add screen to create a new one
+          // Not found by scanner's lookup — navigate to add screen.
+          // If the add screen's own (fresher) lookup finds a duplicate, it pops
+          // immediately with the Product, and we show the sheet here instead.
           ref
               .read(scannerRouteAccessProvider.notifier)
               .grant(ScannerProtectedRoute.addProduct);
-          context.push('/inventory/add?barcode=$barcode');
+          final result = await context.push<Product?>('/inventory/add?barcode=$barcode');
+          if (result != null && mounted) {
+            _showAddUnitsSheet(result);
+          }
         }
       } catch (e) {
         if (mounted) {
@@ -490,7 +495,7 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen>
                           .read(scannerRouteAccessProvider.notifier)
                           .grant(ScannerProtectedRoute.addProduct);
                       context.push(
-                          '/inventory/add?barcode=${product.barcode ?? product.sku}');
+                          '/inventory/add?barcode=${product.barcode ?? product.sku}&forceNew=true');
                     },
                     style: OutlinedButton.styleFrom(
                       foregroundColor: ctx.appTextPrimary,
