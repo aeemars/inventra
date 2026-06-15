@@ -191,7 +191,7 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen>
 
     int sum = 0;
     for (int i = 0; i < payload.length; i++) {
-      final weight = (payload.length - i).isOdd ? 1 : 3;
+      final weight = (payload.length - i).isOdd ? 3 : 1;
       sum += payload[i] * weight;
     }
     final calculatedCheck = (10 - (sum % 10)) % 10;
@@ -290,6 +290,12 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen>
               .read(scannerRouteAccessProvider.notifier)
               .grant(ScannerProtectedRoute.addProduct);
           final result = await context.push<Product?>('/inventory/add?barcode=$barcode');
+          if (mounted) {
+            setState(() {
+              _lastScannedCode = null;
+              _scanConsensus.clear();
+            });
+          }
           if (result != null && mounted) {
             _showAddUnitsSheet(result);
           }
