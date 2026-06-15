@@ -657,6 +657,9 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen>
               _lastScannedCode = null;
               _scanConsensus.clear();
             });
+            if (success) {
+              context.go('/dashboard');
+            }
           }
         },
       ),
