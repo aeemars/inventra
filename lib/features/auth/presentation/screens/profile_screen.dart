@@ -263,7 +263,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 color: context.appTextPrimary, size: 24),
           ),
         ),
-        title: Text('Edit Profile', style: AppTypography.h3),
+        title: Text('Edit Profile',
+            style: AppTypography.h3.copyWith(color: context.appTextPrimary)),
         centerTitle: false,
         actions: [
           PopupMenuButton<String>(
