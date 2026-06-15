@@ -36,6 +36,9 @@ abstract class ProductRepository {
   /// Search products
   Future<List<Product>> searchProducts(String shopId, String query);
 
+  /// Generate a unique barcode for a shop using an atomic counter
+  Future<String> generateBarcode(String shopId);
+
   // ── Categories ──
   Stream<List<Category>> watchCategories(String shopId);
   Future<Category> addCategory(String shopId, Category category);

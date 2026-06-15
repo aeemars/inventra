@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -41,6 +42,11 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen>
   String? _lastScannedCode;
   DateTime? _lastScanTime;
   ScanIntent? _selectedIntent;
+
+  // ── Consensus-based multi-read scanning ──
+  static const int _consensusThreshold = 2;
+  final Map<String, int> _scanConsensus = {};
+  DateTime? _lastConsensusReset;
 
   // Camera permission state
   _CameraPermState _permState = _CameraPermState.checking;
@@ -131,14 +137,74 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen>
     setState(() => _permState = _CameraPermState.granted);
   }
 
+  // ── Barcode extraction & validation helpers ──
+
+  /// Extract the most reliable string from a Barcode object.
+  /// Prefers rawBytes decoded as UTF-8 (bypasses platform string mangling),
+  /// then falls back to rawValue / displayValue.
+  String? _extractBarcodeValue(Barcode barcode) {
+    // Try rawDecodedBytes first — the actual binary data from the scanner
+    final barcodeBytes = barcode.rawDecodedBytes;
+    if (barcodeBytes != null) {
+      try {
+        // BarcodeBytes is a sealed class — extract the Uint8List from the subtype
+        final List<int>? bytes = switch (barcodeBytes) {
+          DecodedBarcodeBytes(:final bytes) => bytes,
+          DecodedVisionBarcodeBytes(:final bytes) => bytes,
+        };
+        if (bytes != null && bytes.isNotEmpty) {
+          final decoded = utf8.decode(bytes, allowMalformed: false).trim();
+          if (decoded.isNotEmpty) return decoded;
+        }
+      } catch (_) {
+        // Fall through to string properties
+      }
+    }
+    return (barcode.rawValue ?? barcode.displayValue)?.trim();
+  }
+
+  /// Normalize UPC-A ↔ EAN-13 so the same physical barcode always produces
+  /// the same string regardless of platform.
+  /// Convention: always store as EAN-13 (13 digits with leading 0 if needed).
+  String _normalizeBarcode(String code, BarcodeFormat? format) {
+    // Only normalize pure-digit codes of length 12 or 13
+    if (!RegExp(r'^\d{12,13}$').hasMatch(code)) return code;
+
+    if (code.length == 12) {
+      // UPC-A → EAN-13: prepend leading zero
+      return '0$code';
+    }
+    return code;
+  }
+
+  /// Validate the check digit for EAN-8 / EAN-13 / UPC-A barcodes.
+  /// Returns true for non-EAN codes (no validation needed) or valid check digits.
+  bool _validateEanCheckDigit(String code) {
+    // Only validate pure-digit codes of standard lengths
+    if (!RegExp(r'^\d+$').hasMatch(code)) return true;
+    if (code.length != 8 && code.length != 12 && code.length != 13) return true;
+
+    // Standard EAN/UPC check digit algorithm
+    final digits = code.split('').map(int.parse).toList();
+    final payload = digits.sublist(0, digits.length - 1);
+    final expectedCheck = digits.last;
+
+    int sum = 0;
+    for (int i = 0; i < payload.length; i++) {
+      final weight = (payload.length - i).isOdd ? 1 : 3;
+      sum += payload[i] * weight;
+    }
+    final calculatedCheck = (10 - (sum % 10)) % 10;
+    return calculatedCheck == expectedCheck;
+  }
+
   void _onBarcodeDetected(BarcodeCapture capture) {
     if (_isProcessing || _selectedIntent == null) return;
     final barcodes = capture.barcodes;
     if (barcodes.isEmpty) return;
 
-    final code =
-        (barcodes.first.rawValue ?? barcodes.first.displayValue)?.trim();
-    if (code == null || code.isEmpty) return;
+    final rawCode = _extractBarcodeValue(barcodes.first);
+    if (rawCode == null || rawCode.isEmpty) return;
 
     // Cooldown: ignore all detections for 400ms after a successful scan
     final now = DateTime.now();
@@ -148,9 +214,29 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen>
     }
 
     // Dedup: don't re-process the same code until reset
-    if (code == _lastScannedCode) return;
+    if (rawCode == _lastScannedCode) return;
 
-    // Process immediately — no debounce delay
+    // Validate EAN/UPC check digit — reject misreads immediately
+    if (!_validateEanCheckDigit(rawCode)) return;
+
+    // Normalize UPC-A ↔ EAN-13
+    final code = _normalizeBarcode(rawCode, barcodes.first.format);
+
+    // Auto-reset consensus if we haven't seen any detection for 2 seconds
+    if (_lastConsensusReset != null &&
+        now.difference(_lastConsensusReset!).inSeconds >= 2) {
+      _scanConsensus.clear();
+    }
+    _lastConsensusReset = now;
+
+    // Increment consensus counter for this code
+    _scanConsensus[code] = (_scanConsensus[code] ?? 0) + 1;
+
+    // Only accept once consensus threshold is reached
+    if (_scanConsensus[code]! < _consensusThreshold) return;
+
+    // Consensus reached — process
+    _scanConsensus.clear();
     _lastScanTime = now;
     _processBarcode(code);
   }
@@ -328,7 +414,10 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen>
               isOutlined: true,
               onPressed: () {
                 Navigator.pop(ctx);
-                setState(() => _lastScannedCode = null);
+                setState(() {
+                  _lastScannedCode = null;
+                  _scanConsensus.clear();
+                });
               },
             ),
             SizedBox(height: MediaQuery.of(ctx).padding.bottom + 16),
@@ -338,7 +427,10 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen>
     ).whenComplete(() {
       // Reset when sheet is dismissed by any means (swipe, back, button)
       if (mounted) {
-        setState(() => _lastScannedCode = null);
+        setState(() {
+          _lastScannedCode = null;
+          _scanConsensus.clear();
+        });
       }
     });
   }
@@ -479,7 +571,10 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen>
                             : 'Restock failed. Please try again.',
                         success,
                       );
-                      setState(() => _lastScannedCode = null);
+                      setState(() {
+                        _lastScannedCode = null;
+                        _scanConsensus.clear();
+                      });
                     }
                   },
                 ),
@@ -520,7 +615,12 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen>
       ),
     ).whenComplete(() {
       qtyController.dispose();
-      if (mounted) setState(() => _lastScannedCode = null);
+      if (mounted) {
+        setState(() {
+          _lastScannedCode = null;
+          _scanConsensus.clear();
+        });
+      }
     });
   }
 
@@ -547,13 +647,19 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen>
             final state = ref.read(scannerControllerProvider);
             _showResultSnackBar(state.message ?? '', success);
             ref.read(scannerControllerProvider.notifier).reset();
-            setState(() => _lastScannedCode = null);
+            setState(() {
+              _lastScannedCode = null;
+              _scanConsensus.clear();
+            });
           }
         },
       ),
     ).whenComplete(() {
       if (mounted) {
-        setState(() => _lastScannedCode = null);
+        setState(() {
+          _lastScannedCode = null;
+          _scanConsensus.clear();
+        });
       }
     });
   }
@@ -608,6 +714,7 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen>
       setState(() {
         _selectedIntent = selected;
         _lastScannedCode = null;
+        _scanConsensus.clear();
       });
     }
   }
@@ -808,6 +915,7 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen>
                             setState(() {
                               _selectedIntent = ScanIntent.addProduct;
                               _lastScannedCode = null;
+                              _scanConsensus.clear();
                             });
                           },
                         ),
@@ -822,6 +930,7 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen>
                             setState(() {
                               _selectedIntent = ScanIntent.newSale;
                               _lastScannedCode = null;
+                              _scanConsensus.clear();
                             });
                           },
                         ),

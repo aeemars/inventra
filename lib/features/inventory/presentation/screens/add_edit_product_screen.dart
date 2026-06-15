@@ -289,15 +289,32 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
 
     final now = DateTime.now();
 
+    // Generate a unique barcode if UPC field is empty (new product without scanned code)
+    String sku;
+    String? barcode;
+    if (_upcController.text.trim().isNotEmpty) {
+      sku = _upcController.text.trim();
+      barcode = _barcodeController.text.trim().isEmpty
+          ? null
+          : _barcodeController.text.trim();
+    } else if (_existingProduct != null) {
+      // Editing an existing product — keep its existing sku/barcode
+      sku = _existingProduct!.sku;
+      barcode = _existingProduct!.barcode;
+    } else {
+      // New product without any barcode — auto-generate a unique one
+      final generatedCode = await ref
+          .read(productRepositoryProvider)
+          .generateBarcode(shopId);
+      sku = generatedCode;
+      barcode = generatedCode; // also set as barcode so scanner can find it
+    }
+
     final product = Product(
       id: _existingProduct?.id ?? '',
       name: _nameController.text.trim(),
-      sku: _upcController.text.trim().isNotEmpty
-          ? _upcController.text.trim()
-          : 'INV-${DateTime.now().millisecondsSinceEpoch}',
-      barcode: _barcodeController.text.trim().isEmpty
-          ? null
-          : _barcodeController.text.trim(),
+      sku: sku,
+      barcode: barcode,
       categoryId: _categoryController.text.trim().isEmpty
           ? null
           : _categoryController.text.trim(),

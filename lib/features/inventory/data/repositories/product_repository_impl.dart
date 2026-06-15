@@ -286,6 +286,30 @@ class ProductRepositoryImpl implements ProductRepository {
     }
   }
 
+  // ── Auto-generated Barcode ──
+
+  @override
+  Future<String> generateBarcode(String shopId) async {
+    try {
+      final counterRef = _firestore.doc('shops/$shopId/settings/barcode_counter');
+      final newCount = await _firestore.runTransaction<int>((txn) async {
+        final snap = await txn.get(counterRef);
+        final current = (snap.data()?['value'] as int?) ?? 0;
+        final next = current + 1;
+        txn.set(counterRef, {'value': next}, SetOptions(merge: true));
+        return next;
+      });
+      final shopSuffix = shopId.length >= 6
+          ? shopId.substring(shopId.length - 6)
+          : shopId.padLeft(6, '0');
+      return 'INV-$shopSuffix-${newCount.toString().padLeft(6, '0')}';
+    } on FirebaseException catch (e) {
+      throw FirestoreFailure.fromCode(e.code, rawMessage: e.message);
+    } catch (e) {
+      throw handleFirestoreException(e, context: 'generate barcode');
+    }
+  }
+
   // ── Categories ──
 
   @override
