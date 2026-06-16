@@ -16,12 +16,14 @@ class AddEditProductScreen extends ConsumerStatefulWidget {
   final String? productId;
   final String? initialBarcode;
   final bool forceNew;
+  final bool autoGenerate;
 
   const AddEditProductScreen({
     super.key,
     this.productId,
     this.initialBarcode,
     this.forceNew = false,
+    this.autoGenerate = false,
   });
 
   @override
@@ -91,14 +93,17 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
         _quantityController.text = '$_quantity';
       }
     });
+    if (widget.autoGenerate) {
+      _upcController.text = 'Auto-generated on Save';
+    }
     if (!isEditing && widget.initialBarcode != null) {
       _barcodeController.text = widget.initialBarcode!;
       _upcController.text = widget.initialBarcode!;
       _isLookingUp = true; // guard against first-render flash
       _lookupBarcode(widget.initialBarcode!);
     }
-    // Only activate for new products not coming from scanner
-    if (!isEditing && widget.initialBarcode == null) {
+    // Only activate for new products not coming from scanner and not auto-generating
+    if (!isEditing && widget.initialBarcode == null && !widget.autoGenerate) {
       _upcController.addListener(_onUpcFieldChanged);
     }
     if (isEditing) {
@@ -289,10 +294,16 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
 
     final now = DateTime.now();
 
-    // Generate a unique barcode if UPC field is empty (new product without scanned code)
+    // Generate a unique barcode if autoGenerate is true or UPC field is empty (new product without scanned code)
     String sku;
     String? barcode;
-    if (_upcController.text.trim().isNotEmpty) {
+    if (widget.autoGenerate) {
+      final generatedCode = await ref
+          .read(productRepositoryProvider)
+          .generateBarcode(shopId);
+      sku = generatedCode;
+      barcode = generatedCode;
+    } else if (_upcController.text.trim().isNotEmpty) {
       sku = _upcController.text.trim();
       barcode = _barcodeController.text.trim().isEmpty
           ? null
@@ -709,8 +720,9 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
                           const SizedBox(height: AppSizes.md),
                           _buildWireframeInput(
                               label: 'UPC',
-                              hint: 'Auto-generated if left blank',
-                              controller: _upcController),
+                              hint: widget.autoGenerate ? 'Auto-generated on Save' : 'Auto-generated if left blank',
+                              controller: _upcController,
+                              readOnly: widget.autoGenerate),
                           const SizedBox(height: AppSizes.md),
                           Row(
                             children: [
@@ -817,6 +829,7 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
     required TextEditingController controller,
     IconData? icon,
     bool isRequired = false,
+    bool readOnly = false,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -836,6 +849,7 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
         const SizedBox(height: 8),
         TextFormField(
           controller: controller,
+          readOnly: readOnly,
           style: TextStyle(color: context.appTextPrimary, fontSize: 14),
           validator: isRequired ? (v) => v!.isEmpty ? 'Required' : null : null,
           decoration: InputDecoration(

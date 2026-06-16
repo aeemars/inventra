@@ -9,7 +9,6 @@ import '../../../../core/widgets/app_card.dart';
 import '../../../../core/widgets/app_text_field.dart';
 import '../../../../core/widgets/empty_state.dart';
 import '../../../../core/extensions/theme_ext.dart';
-import '../../../../core/router/scanner_route_access.dart';
 import '../controllers/inventory_controller.dart';
 
 /// Inventory list screen with search, filter, sort
@@ -105,17 +104,86 @@ class InventoryListScreen extends ConsumerWidget {
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          ref
-              .read(scannerRouteAccessProvider.notifier)
-              .grant(ScannerProtectedRoute.addProduct);
-          context.push('/inventory/add');
-        },
+        onPressed: () => _showAddProductOptions(context, ref),
         backgroundColor: AppColors.primary,
         foregroundColor: AppColors.white,
         icon: const Icon(Icons.add_rounded),
         label: const Text('Add Product',
             style: TextStyle(fontWeight: FontWeight.w600)),
+      ),
+    );
+  }
+
+  void _showAddProductOptions(BuildContext context, WidgetRef ref) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        margin: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: ctx.appSurfaceRaised,
+          borderRadius: BorderRadius.circular(AppSizes.radiusLg),
+        ),
+        child: SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 8),
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: ctx.appTextTertiary.withValues(alpha: 0.3),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text('Add Product',
+                  style: AppTypography.h3.copyWith(color: ctx.appTextPrimary)),
+              const SizedBox(height: 16),
+              ListTile(
+                leading: Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: AppColors.primarySurface,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.qr_code_scanner_rounded,
+                      color: AppColors.primary),
+                ),
+                title: const Text('Scan Barcode'),
+                subtitle: Text('Scan physical barcode using camera',
+                    style: TextStyle(color: ctx.appTextTertiary, fontSize: 13)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  context.go('/scanner');
+                },
+              ),
+              Divider(height: 1, indent: 70, color: ctx.appTextTertiary.withValues(alpha: 0.15)),
+              ListTile(
+                leading: Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: AppColors.primarySurface,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.auto_awesome_rounded,
+                      color: AppColors.primary),
+                ),
+                title: const Text('Auto-Generate Barcode'),
+                subtitle: Text('Create product with a unique generated code',
+                    style: TextStyle(color: ctx.appTextTertiary, fontSize: 13)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  context.push('/inventory/auto-generate');
+                },
+              ),
+              const SizedBox(height: 12),
+            ],
+          ),
+        ),
       ),
     );
   }

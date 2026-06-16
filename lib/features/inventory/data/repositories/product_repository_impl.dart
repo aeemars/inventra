@@ -299,10 +299,7 @@ class ProductRepositoryImpl implements ProductRepository {
         txn.set(counterRef, {'value': next}, SetOptions(merge: true));
         return next;
       });
-      final shopSuffix = shopId.length >= 6
-          ? shopId.substring(shopId.length - 6)
-          : shopId.padLeft(6, '0');
-      return 'INV-$shopSuffix-${newCount.toString().padLeft(6, '0')}';
+      return 'INV-$shopId-${newCount.toString().padLeft(6, '0')}';
     } on FirebaseException catch (e) {
       throw FirestoreFailure.fromCode(e.code, rawMessage: e.message);
     } catch (e) {

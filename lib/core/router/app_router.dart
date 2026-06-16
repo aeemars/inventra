@@ -71,6 +71,10 @@ final routerProvider = Provider<GoRouter>((ref) {
         ),
       ),
       GoRoute(
+        path: '/inventory/auto-generate',
+        builder: (_, __) => const AddEditProductScreen(autoGenerate: true),
+      ),
+      GoRoute(
           path: '/inventory/:id/edit',
           builder: (_, state) =>
               AddEditProductScreen(productId: state.pathParameters['id'])),
