@@ -88,6 +88,7 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
   @override
   void initState() {
     super.initState();
+    _masterDataExpanded = !isEditing;
     _quantityFocusNode.addListener(() {
       if (!_quantityFocusNode.hasFocus) {
         _quantityController.text = '$_quantity';
@@ -351,6 +352,7 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
     );
 
     bool success;
+    Product? addedProduct;
     if (isEditing || _isScannedExistingProduct) {
       // For scanned existing products, update stock rather than creating a duplicate
       if (_isScannedExistingProduct) {
@@ -367,20 +369,30 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
             .updateProduct(product);
       }
     } else {
-      final result = await ref
+      addedProduct = await ref
           .read(inventoryControllerProvider.notifier)
           .addProduct(product);
-      success = result != null;
+      success = addedProduct != null;
     }
 
     if (success && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(isEditing ? 'Product updated!' : 'Product added!'),
+          content: Text(
+            isEditing
+                ? 'Product updated!'
+                : _isScannedExistingProduct
+                    ? 'Stock updated!'
+                    : 'Product added!',
+          ),
           backgroundColor: AppColors.success,
         ),
       );
-      context.go('/inventory');
+      if (widget.initialBarcode != null) {
+        Navigator.pop(context, addedProduct ?? _existingProduct);
+      } else {
+        context.go('/inventory');
+      }
     }
   }
 
@@ -802,9 +814,11 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
                                   color: Colors.white, strokeWidth: 2))
                           : const Icon(Icons.check_rounded, size: 18),
                       label: Text(
-                          _isScannedExistingProduct
-                              ? 'Confirm Restock'
-                              : 'Confirm Addition',
+                          isEditing
+                              ? 'Save Changes'
+                              : _isScannedExistingProduct
+                                  ? 'Confirm Restock'
+                                  : 'Confirm Addition',
                           style: const TextStyle(
                               fontSize: 15, fontWeight: FontWeight.w600)),
                     ),

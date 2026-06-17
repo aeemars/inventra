@@ -13,6 +13,7 @@ import '../../features/inventory/presentation/screens/add_edit_product_screen.da
 import '../../features/edit/presentation/screens/edit_products_screen.dart';
 import '../../features/scanner/presentation/screens/scanner_screen.dart';
 import '../../features/sales/presentation/screens/checkout_screen.dart';
+import '../../features/sales/presentation/screens/sale_screen.dart';
 import '../../features/scanner/presentation/screens/scan_history_screen.dart';
 import '../../features/analytics/presentation/screens/reporting_screen.dart';
 import '../../features/transactions/presentation/screens/transaction_logs_screen.dart';
@@ -79,6 +80,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           builder: (_, state) =>
               AddEditProductScreen(productId: state.pathParameters['id'])),
       GoRoute(path: '/checkout', builder: (_, __) => const CheckoutScreen()),
+      GoRoute(path: '/sale', builder: (_, __) => const SaleScreen()),
       GoRoute(
           path: '/scan-history', builder: (_, __) => const ScanHistoryScreen()),
       GoRoute(
