@@ -38,6 +38,7 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen>
   MobileScannerController? _cameraController;
   final _debouncer = Debouncer(delay: const Duration(milliseconds: 400));
   bool _isProcessing = false;
+  bool _isSheetOpen = false;
   bool _torchEnabled = false;
   String? _lastScannedCode;
   DateTime? _lastScanTime;
@@ -199,7 +200,7 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen>
   }
 
   void _onBarcodeDetected(BarcodeCapture capture) {
-    if (_isProcessing || _selectedIntent == null) return;
+    if (_isProcessing || _isSheetOpen || _selectedIntent == null) return;
     final barcodes = capture.barcodes;
     if (barcodes.isEmpty) return;
 
@@ -289,9 +290,11 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen>
           ref
               .read(scannerRouteAccessProvider.notifier)
               .grant(ScannerProtectedRoute.addProduct);
+          setState(() => _isSheetOpen = true);
           final result = await context.push<Product?>('/inventory/add?barcode=$barcode');
           if (mounted) {
             setState(() {
+              _isSheetOpen = false;
               _lastScannedCode = null;
               _scanConsensus.clear();
             });
@@ -361,6 +364,7 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen>
   // ── Product Not Found Sheet ──
 
   void _showProductNotFoundSheet(String barcode) {
+    setState(() => _isSheetOpen = true);
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -434,6 +438,7 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen>
       // Reset when sheet is dismissed by any means (swipe, back, button)
       if (mounted) {
         setState(() {
+          _isSheetOpen = false;
           _lastScannedCode = null;
           _scanConsensus.clear();
         });
@@ -444,6 +449,7 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen>
   void _showAddUnitsSheet(Product product) {
     int qty = 1;
     final qtyController = TextEditingController(text: '1');
+    setState(() => _isSheetOpen = true);
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -623,6 +629,7 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen>
       qtyController.dispose();
       if (mounted) {
         setState(() {
+          _isSheetOpen = false;
           _lastScannedCode = null;
           _scanConsensus.clear();
         });
@@ -633,6 +640,7 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen>
   // ── Quick Sell Sheet ──
 
   void _showQuickSellSheet(Product product) {
+    setState(() => _isSheetOpen = true);
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -666,6 +674,7 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen>
     ).whenComplete(() {
       if (mounted) {
         setState(() {
+          _isSheetOpen = false;
           _lastScannedCode = null;
           _scanConsensus.clear();
         });
@@ -677,6 +686,7 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen>
 
   void _showManualEntry() {
     final controller = TextEditingController();
+    setState(() => _isSheetOpen = true);
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -706,12 +716,17 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen>
           ),
         ],
       ),
-    );
+    ).then((_) {
+      if (mounted) {
+        setState(() => _isSheetOpen = false);
+      }
+    });
   }
 
   // ── Intent Selection ──
 
   Future<void> _selectScanIntent() async {
+    setState(() => _isSheetOpen = true);
     final selected = await showModalBottomSheet<ScanIntent>(
       context: context,
       isScrollControlled: true,
@@ -725,6 +740,9 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen>
         _lastScannedCode = null;
         _scanConsensus.clear();
       });
+    }
+    if (mounted) {
+      setState(() => _isSheetOpen = false);
     }
   }
 
