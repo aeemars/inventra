@@ -93,6 +93,26 @@ class AuthController extends StateNotifier<AuthState> {
     }
   }
 
+  Future<bool> signInWithGoogle() async {
+    state = state.copyWith(isLoading: true, error: null, isSuccess: false);
+    try {
+      await _repository.signInWithGoogle();
+      state = state.copyWith(isLoading: false, isSuccess: true);
+      return true;
+    } on AuthFailure catch (e) {
+      if (e.code == 'signin-cancelled') {
+        state = state.copyWith(isLoading: false);
+        return false;
+      }
+      state = state.copyWith(isLoading: false, error: e.message);
+      return false;
+    } catch (e) {
+      state = state.copyWith(
+          isLoading: false, error: 'An unexpected error occurred');
+      return false;
+    }
+  }
+
   Future<bool> register({
     required String email,
     required String password,
@@ -283,6 +303,11 @@ class _UnavailableAuthRepository implements AuthRepository {
 
   @override
   Future<void> sendPasswordResetEmail(String email) {
+    throw AuthFailure(message: message, code: 'auth-unavailable');
+  }
+
+  @override
+  Future<AppUser> signInWithGoogle() {
     throw AuthFailure(message: message, code: 'auth-unavailable');
   }
 

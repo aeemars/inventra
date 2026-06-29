@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import '../../../../core/constants/firestore_paths.dart';
 import '../../../../core/errors/failures.dart';
 import '../../domain/entities/app_user.dart';
@@ -249,8 +250,85 @@ class AuthRepositoryImpl implements AuthRepository {
   }
 
   @override
+  Future<AppUser> signInWithGoogle() async {
+    try {
+      final googleSignIn = GoogleSignIn();
+      final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
+      if (googleUser == null) {
+        throw const AuthFailure(
+          message: 'Google Sign-In was cancelled by the user',
+          code: 'signin-cancelled',
+        );
+      }
+
+      final GoogleSignInAuthentication googleAuth =
+          await googleUser.authentication;
+      final OAuthCredential credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+
+      final UserCredential userCredential =
+          await _auth.signInWithCredential(credential);
+      final User? firebaseUser = userCredential.user;
+      if (firebaseUser == null) {
+        throw const AuthFailure(
+          message: 'Failed to retrieve user details from Google',
+        );
+      }
+
+      final uid = firebaseUser.uid;
+      final now = DateTime.now();
+
+      // Check if Firestore document already exists
+      final doc = await _firestore.collection(FirestorePaths.users).doc(uid).get();
+
+      if (doc.exists) {
+        // Existing user: update timestamps
+        await _firestore.collection(FirestorePaths.users).doc(uid).update({
+          'lastLoginAt': Timestamp.fromDate(now),
+          'updatedAt': Timestamp.fromDate(now),
+        });
+        final user = await _fetchUserProfile(uid);
+        _cachedUser = user;
+        return user;
+      } else {
+        // Brand new user: create Firestore document without shop
+        final userModel = UserModel(
+          uid: uid,
+          email: firebaseUser.email ?? '',
+          displayName: firebaseUser.displayName ?? 'Google User',
+          shopId: null,
+          shopName: null,
+          photoUrl: firebaseUser.photoURL,
+          isActive: true,
+          lastLoginAt: now,
+          createdAt: now,
+          updatedAt: now,
+          editPin: null,
+          editPinRecoveryCode: null,
+        );
+
+        await _firestore
+            .collection(FirestorePaths.users)
+            .doc(uid)
+            .set(userModel.toFirestore());
+
+        final user = userModel.toEntity();
+        _cachedUser = user;
+        return user;
+      }
+    } catch (e) {
+      throw _handleException(e);
+    }
+  }
+
+  @override
   Future<void> signOut() async {
     await _auth.signOut();
+    try {
+      await GoogleSignIn().signOut();
+    } catch (_) {}
     _cachedUser = null;
   }
 

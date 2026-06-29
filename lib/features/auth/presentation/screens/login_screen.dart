@@ -133,7 +133,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                 children: [
                   // Header section
                   Padding(
-                    padding: const EdgeInsets.only(top: 32, bottom: 28, left: 24, right: 24),
+                    padding: const EdgeInsets.only(
+                        top: 32, bottom: 28, left: 24, right: 24),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -197,7 +198,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                     keyboardType: TextInputType.emailAddress,
                                     textInputAction: TextInputAction.next,
                                     validator: Validators.email,
-                                    prefixIcon: const Icon(Icons.email_outlined, size: 20),
+                                    prefixIcon: const Icon(Icons.email_outlined,
+                                        size: 20),
                                   ),
                                   const SizedBox(height: AppSizes.lg),
 
@@ -209,7 +211,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                     obscureText: _obscurePassword,
                                     textInputAction: TextInputAction.done,
                                     validator: Validators.password,
-                                    prefixIcon: const Icon(Icons.lock_outline_rounded, size: 20),
+                                    prefixIcon: const Icon(
+                                        Icons.lock_outline_rounded,
+                                        size: 20),
                                     suffixIcon: IconButton(
                                       icon: Icon(
                                         _obscurePassword
@@ -219,7 +223,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                         color: context.appTextTertiary,
                                       ),
                                       onPressed: () {
-                                        setState(() => _obscurePassword = !_obscurePassword);
+                                        setState(() => _obscurePassword =
+                                            !_obscurePassword);
                                       },
                                     ),
                                   ),
@@ -229,7 +234,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                   Align(
                                     alignment: Alignment.centerRight,
                                     child: TextButton(
-                                      onPressed: () => context.push('/forgot-password'),
+                                      onPressed: () =>
+                                          context.push('/forgot-password'),
                                       child: const Text('Forgot Password?'),
                                     ),
                                   ),
@@ -248,10 +254,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                     children: [
                                       const Expanded(child: Divider()),
                                       Padding(
-                                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 16),
                                         child: Text(
                                           'Or continue with',
-                                          style: AppTypography.bodySmall.copyWith(
+                                          style:
+                                              AppTypography.bodySmall.copyWith(
                                             color: context.appTextTertiary,
                                           ),
                                         ),
@@ -265,9 +273,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                   Row(
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
-                                      _socialButton(Icons.g_mobiledata_rounded, 'Google'),
+                                      _socialButton(
+                                          Icons.g_mobiledata_rounded, 'Google'),
                                       const SizedBox(width: AppSizes.lg),
-                                      _socialButton(Icons.apple_rounded, 'Apple'),
+                                      _socialButton(
+                                          Icons.apple_rounded, 'Apple'),
                                     ],
                                   ),
                                   const SizedBox(height: AppSizes.huge),
@@ -278,7 +288,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                     children: [
                                       Text(
                                         "Don't have an account? ",
-                                        style: AppTypography.bodyMedium.copyWith(
+                                        style:
+                                            AppTypography.bodyMedium.copyWith(
                                           color: context.appTextSecondary,
                                         ),
                                       ),
@@ -286,7 +297,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                         onTap: () => context.push('/register'),
                                         child: Text(
                                           'Create Account',
-                                          style: AppTypography.labelLarge.copyWith(
+                                          style:
+                                              AppTypography.labelLarge.copyWith(
                                             color: AppColors.primary,
                                           ),
                                         ),
@@ -297,7 +309,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
 
                                   // ── Footer ──
                                   Text(
-                                    'Inventra © 2026 | ShopManager Pro',
+                                    'Built by aeem',
                                     style: AppTypography.bodySmall.copyWith(
                                       color: context.appTextTertiary,
                                     ),
