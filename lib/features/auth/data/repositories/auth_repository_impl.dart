@@ -27,20 +27,29 @@ class AuthRepositoryImpl implements AuthRepository {
 
   @override
   Stream<AppUser?> get authStateChanges {
-    return _auth.authStateChanges().asyncMap((firebaseUser) async {
+    return _auth.authStateChanges().asyncExpand((firebaseUser) {
       if (firebaseUser == null) {
         _cachedUser = null;
-        return null;
+        return Stream.value(null);
       }
-      try {
-        final user = await _fetchUserProfile(firebaseUser.uid);
-        _cachedUser = user;
-        return user;
-      } catch (e) {
-        // User exists in Auth but not in Firestore yet
-        _cachedUser = null;
-        return null;
-      }
+      return _firestore
+          .collection(FirestorePaths.users)
+          .doc(firebaseUser.uid)
+          .snapshots()
+          .map((snapshot) {
+        if (!snapshot.exists) {
+          _cachedUser = null;
+          return null;
+        }
+        try {
+          final user = UserModel.fromFirestore(snapshot).toEntity();
+          _cachedUser = user;
+          return user;
+        } catch (_) {
+          _cachedUser = null;
+          return null;
+        }
+      });
     });
   }
 

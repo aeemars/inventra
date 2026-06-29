@@ -33,6 +33,15 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   bool _isUploadingPhoto = false;
 
   @override
+  void initState() {
+    super.initState();
+    _nameController = TextEditingController();
+    _emailController = TextEditingController();
+    _phoneController = TextEditingController();
+    _shopNameController = TextEditingController();
+  }
+
+  @override
   void dispose() {
     _nameController.dispose();
     _emailController.dispose();
@@ -44,11 +53,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   void _initControllers() {
     if (_initialized) return;
     final user = ref.read(currentUserProvider);
-    _nameController = TextEditingController(text: user?.displayName ?? '');
-    _emailController = TextEditingController(text: user?.email ?? '');
-    _phoneController = TextEditingController(text: user?.phoneNumber ?? '');
-    _shopNameController = TextEditingController(text: user?.shopName ?? '');
-    _initialized = true;
+    if (user != null) {
+      _nameController.text = user.displayName;
+      _emailController.text = user.email;
+      _phoneController.text = user.phoneNumber ?? '';
+      _shopNameController.text = user.shopName ?? '';
+      _initialized = true;
+    }
   }
 
   /// Converts a photoUrl (either a base64 data URI or a network URL)
