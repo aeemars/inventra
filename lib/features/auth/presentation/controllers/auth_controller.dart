@@ -113,32 +113,6 @@ class AuthController extends StateNotifier<AuthState> {
     }
   }
 
-  Future<bool> register({
-    required String email,
-    required String password,
-    required String displayName,
-    required String shopName,
-  }) async {
-    state = state.copyWith(isLoading: true, error: null, isSuccess: false);
-    try {
-      await _repository.register(
-        email: email,
-        password: password,
-        displayName: displayName,
-        shopName: shopName,
-      );
-      state = state.copyWith(isLoading: false, isSuccess: true);
-      return true;
-    } on AuthFailure catch (e) {
-      state = state.copyWith(isLoading: false, error: e.message);
-      return false;
-    } catch (e) {
-      state = state.copyWith(
-          isLoading: false, error: 'An unexpected error occurred');
-      return false;
-    }
-  }
-
   Future<bool> sendPasswordReset(String email) async {
     state = state.copyWith(isLoading: true, error: null, isSuccess: false);
     try {
@@ -287,16 +261,6 @@ class _UnavailableAuthRepository implements AuthRepository {
   Future<AppUser> signInWithEmail({
     required String email,
     required String password,
-  }) {
-    throw AuthFailure(message: message, code: 'auth-unavailable');
-  }
-
-  @override
-  Future<AppUser> register({
-    required String email,
-    required String password,
-    required String displayName,
-    required String shopName,
   }) {
     throw AuthFailure(message: message, code: 'auth-unavailable');
   }

@@ -14,14 +14,6 @@ abstract class AuthRepository {
     required String password,
   });
 
-  /// Register a new account
-  Future<AppUser> register({
-    required String email,
-    required String password,
-    required String displayName,
-    required String shopName,
-  });
-
   /// Send password reset email
   Future<void> sendPasswordResetEmail(String email);
 

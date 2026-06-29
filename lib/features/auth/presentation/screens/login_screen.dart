@@ -286,30 +286,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                   ),
                                   const SizedBox(height: AppSizes.huge),
 
-                                  // ── Create Account ──
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Text(
-                                        "Don't have an account? ",
-                                        style:
-                                            AppTypography.bodyMedium.copyWith(
-                                          color: context.appTextSecondary,
-                                        ),
-                                      ),
-                                      GestureDetector(
-                                        onTap: () => context.push('/register'),
-                                        child: Text(
-                                          'Create Account',
-                                          style:
-                                              AppTypography.labelLarge.copyWith(
-                                            color: AppColors.primary,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: AppSizes.xxl),
+
 
                                   // ── Footer ──
                                   Text(
