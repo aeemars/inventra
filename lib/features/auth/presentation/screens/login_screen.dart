@@ -338,7 +338,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                 : Icon(icon, size: 28, color: context.appTextSecondary),
             const SizedBox(width: 10),
             Text(
-              'Sign in with $label',
+              ' $label',
               style: AppTypography.labelLarge.copyWith(
                 color: isLoading ? context.appTextTertiary : context.appTextPrimary,
               ),
