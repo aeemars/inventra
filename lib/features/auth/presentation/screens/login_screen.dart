@@ -66,6 +66,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     }
   }
 
+  Future<void> _onGoogleSignIn() async {
+    final success = await ref.read(authControllerProvider.notifier).signInWithGoogle();
+    if (success && mounted) {
+      context.go('/dashboard');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authControllerProvider);
@@ -270,15 +277,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                   const SizedBox(height: AppSizes.xl),
 
                                   // ── Social Login ──
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      _socialButton(
-                                          Icons.g_mobiledata_rounded, 'Google'),
-                                      const SizedBox(width: AppSizes.lg),
-                                      _socialButton(
-                                          Icons.apple_rounded, 'Apple'),
-                                    ],
+                                  Center(
+                                    child: _socialButton(
+                                      Icons.g_mobiledata_rounded,
+                                      'Google',
+                                      onTap: _onGoogleSignIn,
+                                    ),
                                   ),
                                   const SizedBox(height: AppSizes.huge),
 
@@ -332,14 +336,39 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     );
   }
 
-  Widget _socialButton(IconData icon, String label) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-      decoration: BoxDecoration(
-        border: Border.all(color: context.appCardBorder),
-        borderRadius: BorderRadius.circular(AppSizes.radiusMd),
+  Widget _socialButton(IconData icon, String label, {required VoidCallback onTap}) {
+    final isLoading = ref.read(authControllerProvider).isLoading;
+    return GestureDetector(
+      onTap: isLoading ? null : onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+        decoration: BoxDecoration(
+          border: Border.all(color: context.appCardBorder),
+          borderRadius: BorderRadius.circular(AppSizes.radiusMd),
+          color: isLoading ? context.appCardBorder.withValues(alpha: 0.5) : context.appSurface,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            isLoading
+                ? const SizedBox(
+                    width: 28,
+                    height: 28,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+                  )
+                : Icon(icon, size: 28, color: context.appTextSecondary),
+            const SizedBox(width: 10),
+            Text(
+              'Sign in with $label',
+              style: AppTypography.labelLarge.copyWith(
+                color: isLoading ? context.appTextTertiary : context.appTextPrimary,
+              ),
+            ),
+          ],
+        ),
       ),
-      child: Icon(icon, size: 28, color: context.appTextSecondary),
     );
   }
 }
