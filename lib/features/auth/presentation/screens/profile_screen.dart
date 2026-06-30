@@ -166,15 +166,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
     setState(() => _isUploadingPhoto = false);
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          success
-              ? 'Profile photo updated!'
-              : 'Failed to upload photo',
-        ),
-        backgroundColor: success ? AppColors.success : AppColors.error,
-      ),
+    context.showAppSnackBar(
+      message: success ? 'Profile photo updated!' : 'Failed to upload photo',
+      type: success ? AppSnackBarType.success : AppSnackBarType.error,
     );
 
     if (success) {
@@ -198,11 +192,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
     if (success && mounted) {
       ref.invalidate(authStateProvider);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Profile updated successfully'),
-          backgroundColor: AppColors.success,
-        ),
+      context.showAppSnackBar(
+        message: 'Profile updated successfully',
+        type: AppSnackBarType.success,
       );
     }
   }
@@ -246,11 +238,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
     ref.listen(authControllerProvider, (_, state) {
       if (state.error != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(state.error!),
-            backgroundColor: AppColors.error,
-          ),
+        context.showAppSnackBar(
+          message: state.error!,
+          type: AppSnackBarType.error,
         );
         ref.read(authControllerProvider.notifier).clearError();
       }

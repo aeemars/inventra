@@ -35,11 +35,9 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
         .sendPasswordReset(_emailController.text.trim());
 
     if (success && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Password reset email sent! Check your inbox.'),
-          backgroundColor: AppColors.success,
-        ),
+      context.showAppSnackBar(
+        message: 'Password reset email sent! Check your inbox.',
+        type: AppSnackBarType.success,
       );
       context.pop();
     }
