@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/services.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import '../../../../core/constants/firestore_paths.dart';
 import '../../../../core/errors/failures.dart';
@@ -262,8 +263,50 @@ class AuthRepositoryImpl implements AuthRepository {
       return e;
     }
     if (e is FirebaseAuthException) {
+      if (e.code == 'network-request-failed') {
+        return const AuthFailure(
+          message: 'Connection failed. Please check your internet connection and try again.',
+          code: 'network-error',
+        );
+      }
       return AuthFailure.fromCode(e.code);
     }
+    if (e is FirebaseException) {
+      if (e.code == 'network-request-failed') {
+        return const AuthFailure(
+          message: 'Connection failed. Please check your internet connection and try again.',
+          code: 'network-error',
+        );
+      }
+      return AuthFailure(message: e.message ?? e.toString(), code: e.code);
+    }
+    if (e is PlatformException) {
+      if (e.code == 'network_error' || e.message?.contains('ApiException: 7') == true) {
+        return const AuthFailure(
+          message: 'Connection failed. Please check your internet connection and try again.',
+          code: 'network-error',
+        );
+      }
+      return AuthFailure(
+        message: e.message ?? 'A platform error occurred during authentication.',
+        code: e.code,
+      );
+    }
+
+    final errMsg = e.toString().toLowerCase();
+    if (errMsg.contains('network_error') ||
+        errMsg.contains('network-request-failed') ||
+        errMsg.contains('apiexception: 7') ||
+        errMsg.contains('network-error') ||
+        errMsg.contains('connection failed') ||
+        errMsg.contains('failed host lookup') ||
+        errMsg.contains('socketexception')) {
+      return const AuthFailure(
+        message: 'Connection failed. Please check your internet connection and try again.',
+        code: 'network-error',
+      );
+    }
+
     return AuthFailure(message: e.toString());
   }
 }
