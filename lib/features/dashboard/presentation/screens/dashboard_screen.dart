@@ -190,10 +190,10 @@ class DashboardScreen extends ConsumerWidget {
               Row(
                 children: [
                   _QuickAction(
-                    icon: Icons.inventory_2_outlined,
-                    label: 'Products',
+                    icon: Icons.qr_code_2_rounded,
+                    label: 'Auto-Generate\nBarcode',
                     color: AppColors.primary,
-                    onTap: () => context.go('/inventory'),
+                    onTap: () => context.push('/inventory/auto-generate'),
                   ),
                   _QuickAction(
                     icon: Icons.trending_up_rounded,
