@@ -12,9 +12,12 @@ import '../../../../core/router/scanner_route_access.dart';
 import '../../../../core/utils/debouncer.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../core/widgets/app_button.dart';
+import '../../../../core/widgets/app_text_field.dart';
 import '../../../inventory/presentation/controllers/inventory_controller.dart';
 import '../../../inventory/domain/entities/product.dart';
 import '../controllers/scanner_controller.dart';
+import '../../../sales/presentation/controllers/sales_queue_provider.dart';
+import '../../../auth/presentation/controllers/auth_controller.dart';
 
 /// Scanner screen with live camera barcode scanning:
 /// - Camera permission handling
@@ -344,9 +347,20 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen>
           );
 
       if (product != null) {
-        _showQuickSellSheet(product);
+        if (product.quantity <= 0) {
+          _showResultSnackBar('${product.name} is out of stock', false);
+        } else {
+          ref.read(salesQueueProvider.notifier).addOrIncrement(product);
+          _showResultSnackBar('Added ${product.name} to sale', true);
+        }
+        // Keep camera live — do not open a blocking sheet, so the next
+        // product can be scanned immediately.
+        setState(() {
+          _lastScannedCode = null;
+          _scanConsensus.clear();
+        });
       } else {
-        _showProductNotFoundSheet(barcode);
+        _showQuickAddForSaleSheet(barcode);
       }
     } catch (e) {
       if (mounted) {
@@ -363,6 +377,7 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen>
 
   // ── Product Not Found Sheet ──
 
+  // ignore: unused_element
   void _showProductNotFoundSheet(String barcode) {
     setState(() => _isSheetOpen = true);
     showModalBottomSheet(
@@ -639,6 +654,7 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen>
 
   // ── Quick Sell Sheet ──
 
+  // ignore: unused_element
   void _showQuickSellSheet(Product product) {
     setState(() => _isSheetOpen = true);
     showModalBottomSheet(
@@ -670,6 +686,155 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen>
             }
           }
         },
+      ),
+    ).whenComplete(() {
+      if (mounted) {
+        setState(() {
+          _isSheetOpen = false;
+          _lastScannedCode = null;
+          _scanConsensus.clear();
+        });
+      }
+    });
+  }
+
+  // ── Quick Add for Sale Sheet ──
+
+  void _showQuickAddForSaleSheet(String barcode) {
+    final nameController = TextEditingController();
+    final priceController = TextEditingController();
+    int qty = 1;
+
+    setState(() => _isSheetOpen = true);
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) => Padding(
+          padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+          child: Container(
+            padding: const EdgeInsets.all(AppSizes.xxl),
+            decoration: BoxDecoration(
+              color: ctx.appSurfaceRaised,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40, height: 4,
+                    decoration: BoxDecoration(
+                      color: ctx.appDivider,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: AppSizes.lg),
+                Text('New Product for This Sale',
+                    style: AppTypography.h4.copyWith(color: ctx.appTextPrimary)),
+                const SizedBox(height: 4),
+                Text('Barcode: $barcode',
+                    style: AppTypography.bodySmall.copyWith(color: ctx.appTextSecondary)),
+                const SizedBox(height: AppSizes.lg),
+                AppTextField(
+                  label: 'Product Name',
+                  controller: nameController,
+                  hint: 'e.g. Cedar Yoghurt 500ml',
+                ),
+                const SizedBox(height: AppSizes.md),
+                AppTextField(
+                  label: 'Selling Price',
+                  controller: priceController,
+                  keyboardType: TextInputType.number,
+                  hint: '0.00',
+                ),
+                const SizedBox(height: AppSizes.lg),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    IconButton(
+                      onPressed: () {
+                        if (qty > 1) setSheetState(() => qty--);
+                      },
+                      icon: const Icon(Icons.remove_circle_outline_rounded),
+                      color: AppColors.primary,
+                    ),
+                    Text('$qty', style: AppTypography.h4),
+                    IconButton(
+                      onPressed: () => setSheetState(() => qty++),
+                      icon: const Icon(Icons.add_circle_outline_rounded),
+                      color: AppColors.primary,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AppSizes.lg),
+                AppButton(
+                  label: 'Add to Sale',
+                  onPressed: () async {
+                    final name = nameController.text.trim();
+                    final price = double.tryParse(priceController.text.trim());
+                    if (name.isEmpty || price == null || price <= 0) {
+                      ScaffoldMessenger.of(ctx).showSnackBar(
+                        const SnackBar(content: Text('Enter a valid name and price')),
+                      );
+                      return;
+                    }
+
+                    final shopId = ref.read(currentShopIdProvider);
+                    if (shopId == null) return;
+
+                    final userId = ref.read(currentUserProvider)?.uid ?? '';
+                    final now = DateTime.now();
+
+                    final newProduct = Product(
+                      id: '',
+                      name: name,
+                      sku: barcode,
+                      barcode: barcode,
+                      categoryId: null,
+                      categoryName: 'Uncategorized',
+                      costPrice: price,
+                      sellingPrice: price,
+                      quantity: qty,
+                      unit: 'pcs',
+                      reorderLevel: 5,
+                      supplier: null,
+                      description: null,
+                      expiryDate: null,
+                      createdBy: userId,
+                      updatedBy: userId,
+                      searchKeywords: Product.generateKeywords(name, barcode),
+                      createdAt: now,
+                      updatedAt: now,
+                    );
+
+                    final created = await ref
+                        .read(inventoryControllerProvider.notifier)
+                        .addProduct(newProduct);
+
+                    if (created != null) {
+                      ref.read(salesQueueProvider.notifier).addOrIncrement(created, quantity: qty);
+                      if (ctx.mounted) Navigator.pop(ctx);
+                      _showResultSnackBar('Added $name to sale', true);
+                      setState(() {
+                        _lastScannedCode = null;
+                        _scanConsensus.clear();
+                      });
+                    } else if (ctx.mounted) {
+                      ScaffoldMessenger.of(ctx).showSnackBar(
+                        const SnackBar(content: Text('Failed to create product')),
+                      );
+                    }
+                  },
+                ),
+                SizedBox(height: MediaQuery.of(ctx).padding.bottom + 16),
+              ],
+            ),
+          ),
+        ),
       ),
     ).whenComplete(() {
       if (mounted) {
@@ -968,6 +1133,82 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen>
               ),
             ),
           ),
+          if (_selectedIntent == ScanIntent.newSale)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 230,
+              child: Consumer(
+                builder: (context, ref, _) {
+                  final queue = ref.watch(salesQueueProvider);
+                  if (queue.isEmpty) return const SizedBox.shrink();
+                  final subtotal = ref.watch(salesQueueSubtotalProvider);
+                  return SafeArea(
+                    top: false,
+                    child: Container(
+                      margin: const EdgeInsets.all(AppSizes.md),
+                      padding: const EdgeInsets.all(AppSizes.md),
+                      decoration: BoxDecoration(
+                        color: context.appSurfaceRaised,
+                        borderRadius: BorderRadius.circular(AppSizes.radiusLg),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.25),
+                            blurRadius: 16,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 44,
+                            height: 44,
+                            decoration: BoxDecoration(
+                              color: AppColors.primarySurface,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Center(
+                              child: Text(
+                                '${queue.length}',
+                                style: AppTypography.h4.copyWith(color: AppColors.primary),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: AppSizes.md),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '${queue.length} item${queue.length == 1 ? '' : 's'} in sale',
+                                  style: AppTypography.bodyMedium.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                    color: context.appTextPrimary,
+                                  ),
+                                ),
+                                Text(
+                                  Formatters.currency(subtotal),
+                                  style: AppTypography.bodySmall.copyWith(color: AppColors.primary),
+                                ),
+                              ],
+                            ),
+                          ),
+                          ElevatedButton(
+                            onPressed: () => context.push('/sales-queue'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.primary,
+                              foregroundColor: AppColors.white,
+                            ),
+                            child: const Text('Review'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
         ],
       ),
     );

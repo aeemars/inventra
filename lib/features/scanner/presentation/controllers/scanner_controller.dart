@@ -6,6 +6,7 @@ import '../../../../shared/models/scan_history_entry.dart';
 import '../../../auth/presentation/controllers/auth_controller.dart';
 import '../../../inventory/presentation/controllers/inventory_controller.dart';
 import '../../data/scanner_repository.dart';
+import '../../../sales/domain/sales_queue_item.dart';
 
 // ── Repository Provider ──
 final scannerRepositoryProvider = Provider<ScannerRepository>((ref) {
@@ -246,6 +247,57 @@ class ScannerController extends StateNotifier<ScannerActionState> {
       state = state.copyWith(
         status: ScannerStatus.error,
         message: ScannerFailure.adjustmentFailed().message,
+      );
+      return false;
+    }
+  }
+
+  Future<bool> completeMultiItemSale(List<SalesQueueItem> queue) async {
+    final shopId = _shopId;
+    if (shopId == null) {
+      state = state.copyWith(
+        status: ScannerStatus.error,
+        message: ScannerFailure.noShop().message,
+      );
+      return false;
+    }
+
+    state = state.copyWith(status: ScannerStatus.loading);
+
+    try {
+      final items = queue
+          .map((i) => {
+                'productId': i.product.id,
+                'productName': i.product.name,
+                'sku': i.product.sku,
+                'quantity': i.quantity,
+                'unitPrice': i.product.sellingPrice,
+              })
+          .toList();
+
+      await _ref.read(scannerRepositoryProvider).performMultiItemSale(
+            shopId: shopId,
+            items: items,
+            userId: _userId,
+            userName: _userName,
+          );
+
+      final total = queue.fold(0.0, (sum, i) => sum + i.lineTotal);
+      state = state.copyWith(
+        status: ScannerStatus.success,
+        message: 'Sale complete: ${queue.length} item(s), ₦${total.toStringAsFixed(2)}',
+      );
+      return true;
+    } on ScannerFailure catch (e) {
+      state = state.copyWith(status: ScannerStatus.error, message: e.message);
+      return false;
+    } on Failure catch (e) {
+      state = state.copyWith(status: ScannerStatus.error, message: e.message);
+      return false;
+    } catch (_) {
+      state = state.copyWith(
+        status: ScannerStatus.error,
+        message: ScannerFailure.saleFailed().message,
       );
       return false;
     }

@@ -277,4 +277,124 @@ class ScannerRepository {
       throw handleFirestoreException(e, context: 'adjust stock');
     }
   }
+
+  /// Performs an atomic multi-item sale: validates stock for every item,
+  /// deducts each product's quantity, writes one stock_movement per product,
+  /// and creates a single transaction document with all items.
+  Future<String> performMultiItemSale({
+    required String shopId,
+    required List<Map<String, dynamic>> items, // {productId, productName, sku, quantity, unitPrice}
+    required String userId,
+    required String userName,
+  }) async {
+    try {
+      final transactionRef =
+          _firestore.collection(FirestorePaths.transactions(shopId)).doc();
+
+      final productRefs = {
+        for (final item in items)
+          item['productId'] as String:
+              _firestore.collection(FirestorePaths.products(shopId)).doc(item['productId'] as String)
+      };
+
+      final movementRefs = {
+        for (final item in items)
+          item['productId'] as String:
+              _firestore.collection(FirestorePaths.stockMovements(shopId)).doc()
+      };
+
+      double subtotal = 0;
+      final txItems = <Map<String, dynamic>>[];
+
+      await _firestore.runTransaction((txn) async {
+        // ── Phase 1: read every product first (Firestore transaction rule) ──
+        final snapshots = <String, DocumentSnapshot<Map<String, dynamic>>>{};
+        for (final entry in productRefs.entries) {
+          snapshots[entry.key] = await txn.get(entry.value);
+        }
+
+        // ── Phase 2: validate stock for every item before writing anything ──
+        for (final item in items) {
+          final productId = item['productId'] as String;
+          final snapshot = snapshots[productId]!;
+          if (!snapshot.exists) {
+            throw ScannerFailure.productNotFound();
+          }
+          final currentQty = (snapshot.data()!['quantity'] as num).toInt();
+          final requestedQty = item['quantity'] as int;
+          if (currentQty < requestedQty) {
+            throw InsufficientStockException(
+              available: currentQty,
+              requested: requestedQty,
+            );
+          }
+        }
+
+        // ── Phase 3: apply all writes ──
+        final now = FieldValue.serverTimestamp();
+        for (final item in items) {
+          final productId = item['productId'] as String;
+          final snapshot = snapshots[productId]!;
+          final currentQty = (snapshot.data()!['quantity'] as num).toInt();
+          final requestedQty = item['quantity'] as int;
+          final unitPrice = (item['unitPrice'] as num).toDouble();
+          final newQty = currentQty - requestedQty;
+          final lineTotal = unitPrice * requestedQty;
+          subtotal += lineTotal;
+
+          txn.update(productRefs[productId]!, {
+            'quantity': newQty,
+            'updatedAt': now,
+          });
+
+          txn.set(movementRefs[productId]!, {
+            'productId': productId,
+            'productName': item['productName'],
+            'type': 'sale',
+            'quantityChange': -requestedQty,
+            'quantityBefore': currentQty,
+            'quantityAfter': newQty,
+            'reference': transactionRef.id,
+            'userId': userId,
+            'userName': userName,
+            'source': 'scan',
+            'createdAt': now,
+          });
+
+          txItems.add({
+            'productId': productId,
+            'productName': item['productName'],
+            'sku': item['sku'],
+            'quantity': requestedQty,
+            'unitPrice': unitPrice,
+            'totalPrice': lineTotal,
+          });
+        }
+
+        txn.set(transactionRef, {
+          'type': 'sale',
+          'items': txItems,
+          'subtotal': subtotal,
+          'discount': 0,
+          'taxAmount': 0,
+          'total': subtotal,
+          'paymentMethod': 'pending',
+          'status': 'completed',
+          'createdBy': userId,
+          'createdByName': userName,
+          'createdAt': now,
+        });
+      });
+
+      return transactionRef.id;
+    } on ScannerFailure {
+      rethrow;
+    } on InsufficientStockException catch (e) {
+      throw ScannerFailure.insufficientStock(e.available, e.requested);
+    } on FirebaseException catch (e) {
+      throw FirestoreFailure.fromCode(e.code, rawMessage: e.message);
+    } catch (e) {
+      throw handleFirestoreException(e, context: 'complete multi-item sale');
+    }
+  }
 }
