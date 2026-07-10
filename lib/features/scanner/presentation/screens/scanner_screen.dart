@@ -1146,6 +1146,7 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen>
                   return SafeArea(
                     top: false,
                     child: Container(
+                      width: double.infinity,
                       margin: const EdgeInsets.all(AppSizes.md),
                       padding: const EdgeInsets.all(AppSizes.md),
                       decoration: BoxDecoration(
