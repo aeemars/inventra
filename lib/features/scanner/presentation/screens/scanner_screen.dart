@@ -1135,33 +1135,22 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen>
           ),
           if (_selectedIntent == ScanIntent.newSale)
             Positioned(
-              left: 0,
-              right: 0,
+              left: AppSizes.md,
+              right: AppSizes.md,
               bottom: 230,
               child: Consumer(
                 builder: (context, ref, _) {
                   final queue = ref.watch(salesQueueProvider);
                   if (queue.isEmpty) return const SizedBox.shrink();
                   final subtotal = ref.watch(salesQueueSubtotalProvider);
-                  return SafeArea(
-                    top: false,
-                    child: Container(
-                      width: double.infinity,
-                      margin: const EdgeInsets.all(AppSizes.md),
+                  return Material(
+                    elevation: 8,
+                    shadowColor: Colors.black54,
+                    borderRadius: BorderRadius.circular(AppSizes.radiusLg),
+                    color: context.appSurfaceRaised,
+                    child: Padding(
                       padding: const EdgeInsets.all(AppSizes.md),
-                      decoration: BoxDecoration(
-                        color: context.appSurfaceRaised,
-                        borderRadius: BorderRadius.circular(AppSizes.radiusLg),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.25),
-                            blurRadius: 16,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
                       child: Row(
-                        mainAxisSize: MainAxisSize.max,
                         children: [
                           Container(
                             width: 44,
@@ -1177,14 +1166,16 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen>
                               ),
                             ),
                           ),
-                          const SizedBox(width: AppSizes.md),
+                          const SizedBox(width: 12),
                           Expanded(
                             child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
                               mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
                                   '${queue.length} item${queue.length == 1 ? '' : 's'} in sale',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                   style: AppTypography.bodyMedium.copyWith(
                                     fontWeight: FontWeight.w600,
                                     color: context.appTextPrimary,
@@ -1192,17 +1183,20 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen>
                                 ),
                                 Text(
                                   Formatters.currency(subtotal),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                   style: AppTypography.bodySmall.copyWith(color: AppColors.primary),
                                 ),
                               ],
                             ),
                           ),
-                          const SizedBox(width: AppSizes.sm),
+                          const SizedBox(width: 8),
                           ElevatedButton(
                             onPressed: () => context.push('/sales-queue'),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: AppColors.primary,
                               foregroundColor: AppColors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                             ),
                             child: const Text('Review'),
                           ),
