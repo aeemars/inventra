@@ -22,9 +22,10 @@ class SalesQueueScreen extends ConsumerWidget {
     return Scaffold(
       backgroundColor: context.appBackground,
       appBar: AppBar(
-        title: const Text('Review Sale'),
+        title: Text('Review Sale', style: TextStyle(color: context.appTextPrimary)),
         backgroundColor: Colors.transparent,
         elevation: 0,
+        iconTheme: IconThemeData(color: context.appTextPrimary),
       ),
       body: queue.isEmpty
           ? Center(
@@ -48,7 +49,10 @@ class SalesQueueScreen extends ConsumerWidget {
                           children: [
                             Text(
                               item.product.name,
-                              style: AppTypography.bodyMedium.copyWith(fontWeight: FontWeight.w600),
+                              style: AppTypography.bodyMedium.copyWith(
+                                fontWeight: FontWeight.w600,
+                                color: context.appTextPrimary,
+                              ),
                             ),
                             Text(
                               Formatters.currency(item.product.sellingPrice),
@@ -64,7 +68,7 @@ class SalesQueueScreen extends ConsumerWidget {
                         icon: const Icon(Icons.remove_circle_outline_rounded),
                         color: AppColors.primary,
                       ),
-                      Text('${item.quantity}', style: AppTypography.bodyMedium),
+                      Text('${item.quantity}', style: AppTypography.bodyMedium.copyWith(color: context.appTextPrimary)),
                       IconButton(
                         onPressed: () => ref
                             .read(salesQueueProvider.notifier)
@@ -78,7 +82,10 @@ class SalesQueueScreen extends ConsumerWidget {
                         child: Text(
                           Formatters.currency(item.lineTotal),
                           textAlign: TextAlign.right,
-                          style: AppTypography.bodyMedium.copyWith(fontWeight: FontWeight.w600),
+                          style: AppTypography.bodyMedium.copyWith(
+                            fontWeight: FontWeight.w600,
+                            color: context.appTextPrimary,
+                          ),
                         ),
                       ),
                       IconButton(
@@ -104,7 +111,7 @@ class SalesQueueScreen extends ConsumerWidget {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('Total', style: AppTypography.h4),
+                        Text('Total', style: AppTypography.h4.copyWith(color: context.appTextPrimary)),
                         Text(
                           Formatters.currency(subtotal),
                           style: AppTypography.h4.copyWith(color: AppColors.primary),
