@@ -1129,84 +1129,51 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen>
                       ),
                     ],
                   ),
+                  // ── Review Sale button (visible when queue has items) ──
+                  if (_selectedIntent == ScanIntent.newSale)
+                    Consumer(
+                      builder: (context, ref, _) {
+                        final queue = ref.watch(salesQueueProvider);
+                        if (queue.isEmpty) return const SizedBox.shrink();
+                        final subtotal = ref.watch(salesQueueSubtotalProvider);
+                        return Column(
+                          children: [
+                            const SizedBox(height: AppSizes.md),
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton.icon(
+                                onPressed: () => context.push('/sales-queue'),
+                                icon: Badge(
+                                  label: Text('${queue.length}'),
+                                  backgroundColor: AppColors.white,
+                                  textColor: AppColors.primary,
+                                  child: const Icon(Icons.shopping_cart_rounded, size: 20),
+                                ),
+                                label: Text(
+                                  'Review Sale — ${Formatters.currency(subtotal)}',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.primary,
+                                  foregroundColor: AppColors.white,
+                                  padding: const EdgeInsets.symmetric(vertical: 14),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(AppSizes.radiusMd),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
                 ],
               ),
             ),
           ),
-          if (_selectedIntent == ScanIntent.newSale)
-            Positioned(
-              left: AppSizes.md,
-              right: AppSizes.md,
-              bottom: 230,
-              child: Consumer(
-                builder: (context, ref, _) {
-                  final queue = ref.watch(salesQueueProvider);
-                  if (queue.isEmpty) return const SizedBox.shrink();
-                  final subtotal = ref.watch(salesQueueSubtotalProvider);
-                  return Material(
-                    elevation: 8,
-                    shadowColor: Colors.black54,
-                    borderRadius: BorderRadius.circular(AppSizes.radiusLg),
-                    color: context.appSurfaceRaised,
-                    child: Padding(
-                      padding: const EdgeInsets.all(AppSizes.md),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 44,
-                            height: 44,
-                            decoration: BoxDecoration(
-                              color: AppColors.primarySurface,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Center(
-                              child: Text(
-                                '${queue.length}',
-                                style: AppTypography.h4.copyWith(color: AppColors.primary),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  '${queue.length} item${queue.length == 1 ? '' : 's'} in sale',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: AppTypography.bodyMedium.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                    color: context.appTextPrimary,
-                                  ),
-                                ),
-                                Text(
-                                  Formatters.currency(subtotal),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: AppTypography.bodySmall.copyWith(color: AppColors.primary),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          ElevatedButton(
-                            onPressed: () => context.push('/sales-queue'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.primary,
-                              foregroundColor: AppColors.white,
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                            ),
-                            child: const Text('Review'),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
         ],
       ),
     );
