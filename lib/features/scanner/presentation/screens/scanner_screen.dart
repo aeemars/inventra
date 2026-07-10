@@ -351,7 +351,6 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen>
           _showResultSnackBar('${product.name} is out of stock', false);
         } else {
           ref.read(salesQueueProvider.notifier).addOrIncrement(product);
-          _showResultSnackBar('Added ${product.name} to sale', true);
         }
         // Keep camera live — do not open a blocking sheet, so the next
         // product can be scanned immediately.
@@ -818,7 +817,6 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen>
                     if (created != null) {
                       ref.read(salesQueueProvider.notifier).addOrIncrement(created, quantity: qty);
                       if (ctx.mounted) Navigator.pop(ctx);
-                      _showResultSnackBar('Added $name to sale', true);
                       setState(() {
                         _lastScannedCode = null;
                         _scanConsensus.clear();
