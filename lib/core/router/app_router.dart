@@ -11,7 +11,6 @@ import '../../features/inventory/presentation/screens/inventory_list_screen.dart
 import '../../features/inventory/presentation/screens/add_edit_product_screen.dart';
 import '../../features/edit/presentation/screens/edit_products_screen.dart';
 import '../../features/scanner/presentation/screens/scanner_screen.dart';
-import '../../features/sales/presentation/screens/checkout_screen.dart';
 import '../../features/sales/presentation/screens/sale_screen.dart';
 import '../../features/sales/presentation/screens/sales_queue_screen.dart';
 import '../../features/scanner/presentation/screens/scan_history_screen.dart';
@@ -78,7 +77,6 @@ final routerProvider = Provider<GoRouter>((ref) {
           path: '/inventory/:id/edit',
           builder: (_, state) =>
               AddEditProductScreen(productId: state.pathParameters['id'])),
-      GoRoute(path: '/checkout', builder: (_, __) => const CheckoutScreen()),
       GoRoute(path: '/sales-queue', builder: (_, __) => const SalesQueueScreen()),
       GoRoute(path: '/sale', builder: (_, __) => const SaleScreen()),
       GoRoute(
