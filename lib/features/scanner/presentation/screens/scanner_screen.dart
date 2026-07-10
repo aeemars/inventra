@@ -1161,6 +1161,7 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen>
                         ],
                       ),
                       child: Row(
+                        mainAxisSize: MainAxisSize.max,
                         children: [
                           Container(
                             width: 44,
@@ -1180,6 +1181,7 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen>
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
                               children: [
                                 Text(
                                   '${queue.length} item${queue.length == 1 ? '' : 's'} in sale',
@@ -1195,6 +1197,7 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen>
                               ],
                             ),
                           ),
+                          const SizedBox(width: AppSizes.sm),
                           ElevatedButton(
                             onPressed: () => context.push('/sales-queue'),
                             style: ElevatedButton.styleFrom(
