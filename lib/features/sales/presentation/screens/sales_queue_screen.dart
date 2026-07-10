@@ -11,13 +11,59 @@ import '../../../../core/widgets/app_card.dart';
 import '../../../scanner/presentation/controllers/scanner_controller.dart';
 import '../controllers/sales_queue_provider.dart';
 
-class SalesQueueScreen extends ConsumerWidget {
+class SalesQueueScreen extends ConsumerStatefulWidget {
   const SalesQueueScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<SalesQueueScreen> createState() => _SalesQueueScreenState();
+}
+
+class _SalesQueueScreenState extends ConsumerState<SalesQueueScreen> {
+  final Map<String, TextEditingController> _qtyControllers = {};
+
+  TextEditingController _controllerFor(String productId, int currentQty) {
+    final controller = _qtyControllers.putIfAbsent(
+      productId,
+      () => TextEditingController(text: '$currentQty'),
+    );
+    // Sync if provider quantity changed externally (e.g. +/- buttons)
+    if (controller.text != '$currentQty') {
+      controller.text = '$currentQty';
+    }
+    return controller;
+  }
+
+  void _onQtySubmitted(String productId, String value) {
+    final parsed = int.tryParse(value.trim());
+    if (parsed != null && parsed > 0) {
+      ref.read(salesQueueProvider.notifier).updateQuantity(productId, parsed);
+    } else {
+      // Reset to current quantity if invalid
+      final queue = ref.read(salesQueueProvider);
+      final item = queue.firstWhere((i) => i.product.id == productId);
+      _qtyControllers[productId]?.text = '${item.quantity}';
+    }
+  }
+
+  @override
+  void dispose() {
+    for (final c in _qtyControllers.values) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final queue = ref.watch(salesQueueProvider);
     final subtotal = ref.watch(salesQueueSubtotalProvider);
+
+    // Clean up controllers for removed items
+    _qtyControllers.removeWhere((id, c) {
+      final exists = queue.any((item) => item.product.id == id);
+      if (!exists) c.dispose();
+      return !exists;
+    });
 
     return Scaffold(
       backgroundColor: context.appBackground,
@@ -40,6 +86,7 @@ class SalesQueueScreen extends ConsumerWidget {
               separatorBuilder: (_, __) => const SizedBox(height: AppSizes.sm),
               itemBuilder: (context, index) {
                 final item = queue[index];
+                final qtyController = _controllerFor(item.product.id, item.quantity);
                 return AppCard(
                   child: Row(
                     children: [
@@ -67,14 +114,50 @@ class SalesQueueScreen extends ConsumerWidget {
                             .updateQuantity(item.product.id, item.quantity - 1),
                         icon: const Icon(Icons.remove_circle_outline_rounded),
                         color: AppColors.primary,
+                        visualDensity: VisualDensity.compact,
                       ),
-                      Text('${item.quantity}', style: AppTypography.bodyMedium.copyWith(color: context.appTextPrimary)),
+                      SizedBox(
+                        width: 44,
+                        child: TextField(
+                          controller: qtyController,
+                          keyboardType: TextInputType.number,
+                          textAlign: TextAlign.center,
+                          style: AppTypography.bodyMedium.copyWith(
+                            fontWeight: FontWeight.w600,
+                            color: context.appTextPrimary,
+                          ),
+                          decoration: InputDecoration(
+                            isDense: true,
+                            contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                            filled: true,
+                            fillColor: context.appInputFill,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              borderSide: BorderSide(color: context.appCardBorder),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              borderSide: BorderSide(color: context.appCardBorder),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+                            ),
+                          ),
+                          onSubmitted: (val) => _onQtySubmitted(item.product.id, val),
+                          onTapOutside: (_) {
+                            _onQtySubmitted(item.product.id, qtyController.text);
+                            FocusScope.of(context).unfocus();
+                          },
+                        ),
+                      ),
                       IconButton(
                         onPressed: () => ref
                             .read(salesQueueProvider.notifier)
                             .updateQuantity(item.product.id, item.quantity + 1),
                         icon: const Icon(Icons.add_circle_outline_rounded),
                         color: AppColors.primary,
+                        visualDensity: VisualDensity.compact,
                       ),
                       const SizedBox(width: AppSizes.sm),
                       SizedBox(
@@ -94,6 +177,7 @@ class SalesQueueScreen extends ConsumerWidget {
                             .removeItem(item.product.id),
                         icon: const Icon(Icons.close_rounded, size: 18),
                         color: AppColors.error,
+                        visualDensity: VisualDensity.compact,
                       ),
                     ],
                   ),
@@ -121,7 +205,7 @@ class SalesQueueScreen extends ConsumerWidget {
                     const SizedBox(height: AppSizes.md),
                     AppButton(
                       label: 'Proceed — ${Formatters.currency(subtotal)}',
-                      onPressed: () => _showConfirmSheet(context, ref, queue, subtotal),
+                      onPressed: () => _showConfirmSheet(context, queue, subtotal),
                     ),
                   ],
                 ),
@@ -132,7 +216,6 @@ class SalesQueueScreen extends ConsumerWidget {
 
   void _showConfirmSheet(
     BuildContext context,
-    WidgetRef ref,
     List queue,
     double subtotal,
   ) {
