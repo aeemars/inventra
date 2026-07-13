@@ -77,6 +77,14 @@ class LocalNotificationService {
     );
   }
 
+  static Future<void> showTaxThresholdAlert({
+    required int id,
+    required String title,
+    required String body,
+  }) async {
+    await _show(id: id, title: title, body: body);
+  }
+
   /// Cancel a notification by id (call when stock is replenished).
   static Future<void> cancel(int id) => _plugin.cancel(id);
 

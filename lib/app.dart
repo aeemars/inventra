@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/notifications/stock_alert_service.dart';
+import 'core/notifications/tax_threshold_service.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/theme_provider.dart';
@@ -11,6 +12,7 @@ class InventraApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     ref.watch(stockAlertProvider); // keeps the low-stock listener alive
+    ref.watch(taxThresholdProvider); // keeps the tax threshold listener alive
     final router = ref.watch(routerProvider);
     final themeMode = ref.watch(themeModeProvider);
 

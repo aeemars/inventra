@@ -13,6 +13,7 @@ class ShopSettings extends Equatable {
   final int expiryAlertDays;
   final DateTime updatedAt;
   final String updatedBy;
+  final int? taxThresholdNotifiedYear;
 
   const ShopSettings({
     this.lowStockThreshold = 5,
@@ -25,6 +26,7 @@ class ShopSettings extends Equatable {
     this.expiryAlertDays = 30,
     required this.updatedAt,
     required this.updatedBy,
+    this.taxThresholdNotifiedYear,
   });
 
   /// Default settings for a newly created shop
@@ -46,6 +48,7 @@ class ShopSettings extends Equatable {
     int? expiryAlertDays,
     DateTime? updatedAt,
     String? updatedBy,
+    int? taxThresholdNotifiedYear,
   }) {
     return ShopSettings(
       lowStockThreshold: lowStockThreshold ?? this.lowStockThreshold,
@@ -58,6 +61,7 @@ class ShopSettings extends Equatable {
       expiryAlertDays: expiryAlertDays ?? this.expiryAlertDays,
       updatedAt: updatedAt ?? this.updatedAt,
       updatedBy: updatedBy ?? this.updatedBy,
+      taxThresholdNotifiedYear: taxThresholdNotifiedYear ?? this.taxThresholdNotifiedYear,
     );
   }
 
@@ -68,6 +72,7 @@ class ShopSettings extends Equatable {
         taxRate,
         enableNotifications,
         enableExpiryAlerts,
+        taxThresholdNotifiedYear,
       ];
 }
 
@@ -83,6 +88,7 @@ class ShopSettingsModel {
   final int expiryAlertDays;
   final DateTime updatedAt;
   final String updatedBy;
+  final int? taxThresholdNotifiedYear;
 
   const ShopSettingsModel({
     this.lowStockThreshold = 5,
@@ -95,6 +101,7 @@ class ShopSettingsModel {
     this.expiryAlertDays = 30,
     required this.updatedAt,
     required this.updatedBy,
+    this.taxThresholdNotifiedYear,
   });
 
   factory ShopSettingsModel.fromFirestore(
@@ -112,6 +119,7 @@ class ShopSettingsModel {
       updatedAt:
           (d['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       updatedBy: d['updatedBy'] as String? ?? '',
+      taxThresholdNotifiedYear: (d['taxThresholdNotifiedYear'] as num?)?.toInt(),
     );
   }
 
@@ -127,6 +135,7 @@ class ShopSettingsModel {
       'expiryAlertDays': expiryAlertDays,
       'updatedAt': FieldValue.serverTimestamp(),
       'updatedBy': updatedBy,
+      'taxThresholdNotifiedYear': taxThresholdNotifiedYear,
     };
   }
 
@@ -142,6 +151,7 @@ class ShopSettingsModel {
       expiryAlertDays: expiryAlertDays,
       updatedAt: updatedAt,
       updatedBy: updatedBy,
+      taxThresholdNotifiedYear: taxThresholdNotifiedYear,
     );
   }
 
@@ -157,6 +167,7 @@ class ShopSettingsModel {
       expiryAlertDays: settings.expiryAlertDays,
       updatedAt: settings.updatedAt,
       updatedBy: settings.updatedBy,
+      taxThresholdNotifiedYear: settings.taxThresholdNotifiedYear,
     );
   }
 }

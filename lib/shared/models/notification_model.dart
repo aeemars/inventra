@@ -6,7 +6,8 @@ enum NotificationType {
   lowStock,
   outOfStock,
   expiryWarning,
-  system;
+  system,
+  taxThreshold;
 
   String get firestoreValue {
     switch (this) {
@@ -18,6 +19,8 @@ enum NotificationType {
         return 'expiry_warning';
       case NotificationType.system:
         return 'system';
+      case NotificationType.taxThreshold:
+        return 'tax_threshold';
     }
   }
 
@@ -31,6 +34,8 @@ enum NotificationType {
         return NotificationType.expiryWarning;
       case 'system':
         return NotificationType.system;
+      case 'tax_threshold':
+        return NotificationType.taxThreshold;
       default:
         return NotificationType.system;
     }

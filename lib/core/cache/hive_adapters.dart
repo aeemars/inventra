@@ -332,12 +332,13 @@ class ShopSettingsAdapter extends TypeAdapter<ShopSettings> {
       expiryAlertDays: fields[7] as int? ?? 30,
       updatedAt: fields[8] as DateTime,
       updatedBy: fields[9] as String,
+      taxThresholdNotifiedYear: fields[10] as int?,
     );
   }
 
   @override
   void write(BinaryWriter writer, ShopSettings obj) {
-    writer.writeByte(10);
+    writer.writeByte(11);
     writer
       ..writeByte(0)..write(obj.lowStockThreshold)
       ..writeByte(1)..write(obj.currency)
@@ -348,6 +349,7 @@ class ShopSettingsAdapter extends TypeAdapter<ShopSettings> {
       ..writeByte(6)..write(obj.enableExpiryAlerts)
       ..writeByte(7)..write(obj.expiryAlertDays)
       ..writeByte(8)..write(obj.updatedAt)
-      ..writeByte(9)..write(obj.updatedBy);
+      ..writeByte(9)..write(obj.updatedBy)
+      ..writeByte(10)..write(obj.taxThresholdNotifiedYear);
   }
 }

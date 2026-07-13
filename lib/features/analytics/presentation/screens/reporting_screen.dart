@@ -10,6 +10,8 @@ import '../../../../core/widgets/app_card.dart';
 import '../../../transactions/presentation/controllers/transaction_logs_controller.dart';
 import '../controllers/reporting_controller.dart';
 import 'package:fl_chart/fl_chart.dart';
+import '../../../../core/constants/tax_policy.dart';
+import '../controllers/annual_revenue_provider.dart';
 
 /// Reporting screen driven by live Firestore data:
 /// - Revenue + Units Sold header cards (from stock_movements)
@@ -56,6 +58,60 @@ class ReportingScreen extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // ── Annual Revenue progress card (Nigeria Tax Act 2025) ──
+              Consumer(
+                builder: (context, ref, _) {
+                  final annualRevenue = ref.watch(annualRevenueProvider);
+                  final progress = (annualRevenue / TaxPolicy.smallCompanyTurnoverThreshold).clamp(0.0, 1.0);
+                  final isOverThreshold = annualRevenue >= TaxPolicy.smallCompanyTurnoverThreshold;
+
+                  return AppCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.account_balance_outlined,
+                              color: isOverThreshold ? AppColors.error : AppColors.primary,
+                              size: 20,
+                            ),
+                            const SizedBox(width: AppSizes.sm),
+                            Text('Annual Revenue (${DateTime.now().year})',
+                                style: AppTypography.bodyMedium.copyWith(fontWeight: FontWeight.w600)),
+                          ],
+                        ),
+                        const SizedBox(height: AppSizes.sm),
+                        Text(Formatters.currency(annualRevenue),
+                            style: AppTypography.h3.copyWith(
+                              color: isOverThreshold ? AppColors.error : context.appTextPrimary,
+                            )),
+                        const SizedBox(height: AppSizes.sm),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(4),
+                          child: LinearProgressIndicator(
+                            value: progress,
+                            minHeight: 8,
+                            backgroundColor: context.appDivider,
+                            color: isOverThreshold ? AppColors.error : AppColors.primary,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          isOverThreshold
+                              ? 'Exceeded the ₦100M small-company tax exemption threshold'
+                              : '${Formatters.currency(TaxPolicy.smallCompanyTurnoverThreshold - annualRevenue)} below the ₦100M small-company threshold',
+                          style: AppTypography.labelSmall.copyWith(
+                            color: isOverThreshold ? AppColors.error : context.appTextSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(height: AppSizes.lg),
+
               // ── Revenue Cards ──
               Row(
                 children: [
