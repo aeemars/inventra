@@ -280,7 +280,7 @@ class _RevenueCard extends StatelessWidget {
   }
 }
 
-// ── Sales Trends Bar Chart (last 7 days) ──
+// ── Sales Trends Line Chart (last 7 days) — modern gradient area style ──
 class _SalesTrendsChart extends StatelessWidget {
   final List<DailySales> dailySales;
 
@@ -290,92 +290,205 @@ class _SalesTrendsChart extends StatelessWidget {
   Widget build(BuildContext context) {
     final hasData = dailySales.any((d) => d.unitsSold > 0);
 
+    if (!hasData) {
+      return AppCard(
+        child: SizedBox(
+          height: 220,
+          child: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.show_chart_rounded,
+                    size: 40,
+                    color: context.appTextTertiary.withValues(alpha: 0.4)),
+                const SizedBox(height: 12),
+                Text('No sales in the last 7 days',
+                    style: AppTypography.bodySmall
+                        .copyWith(color: context.appTextTertiary)),
+                const SizedBox(height: 4),
+                Text(
+                    'Sales data will appear here once transactions are recorded',
+                    style: AppTypography.labelSmall
+                        .copyWith(color: context.appTextTertiary),
+                    textAlign: TextAlign.center),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    final maxUnits = dailySales
+        .map((d) => d.unitsSold)
+        .fold<int>(0, (a, b) => a > b ? a : b);
+    final chartMax = (maxUnits * 1.25).clamp(4, double.infinity).toDouble();
+
     return AppCard(
+      padding: const EdgeInsets.fromLTRB(8, 20, 20, 12),
       child: SizedBox(
-        height: 200,
-        child: hasData
-            ? BarChart(
-                BarChartData(
-                  barTouchData: BarTouchData(
-                    enabled: true,
-                    touchTooltipData: BarTouchTooltipData(
-                      getTooltipItem: (group, groupIndex, rod, rodIndex) {
-                        final day = dailySales[group.x.toInt()];
-                        return BarTooltipItem(
-                          '${day.unitsSold} units\n${Formatters.currency(day.revenue)}',
-                          const TextStyle(
-                            color: Colors.white,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        );
-                      },
+        height: 220,
+        child: LineChart(
+          LineChartData(
+            minY: 0,
+            maxY: chartMax,
+            lineTouchData: LineTouchData(
+              enabled: true,
+              touchTooltipData: LineTouchTooltipData(
+                tooltipBorderRadius: BorderRadius.circular(12),
+                tooltipPadding: const EdgeInsets.symmetric(
+                    horizontal: 12, vertical: 8),
+                getTooltipColor: (_) => context.isDark
+                    ? const Color(0xFF2C2F36)
+                    : const Color(0xFF1B5E20),
+                getTooltipItems: (spots) => spots.map((spot) {
+                  final day = dailySales[spot.x.toInt()];
+                  return LineTooltipItem(
+                    '${DateFormat('EEE, MMM d').format(day.date)}\n',
+                    const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w500,
                     ),
-                  ),
-                  titlesData: FlTitlesData(
-                    leftTitles: const AxisTitles(
-                        sideTitles: SideTitles(showTitles: false)),
-                    rightTitles: const AxisTitles(
-                        sideTitles: SideTitles(showTitles: false)),
-                    topTitles: const AxisTitles(
-                        sideTitles: SideTitles(showTitles: false)),
-                    bottomTitles: AxisTitles(
-                      sideTitles: SideTitles(
-                        showTitles: true,
-                        getTitlesWidget: (v, _) {
-                          final index = v.toInt();
-                          if (index < 0 || index >= dailySales.length) {
-                            return const SizedBox.shrink();
-                          }
-                          final dayName = DateFormat('E')
-                              .format(dailySales[index].date);
-                          return Padding(
-                            padding: const EdgeInsets.only(top: 6),
-                            child: Text(dayName,
-                                style: TextStyle(
-                                    fontSize: 10,
-                                    color: context.appTextTertiary)),
-                          );
-                        },
+                    children: [
+                      TextSpan(
+                        text: '${day.unitsSold} units · ',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
+                      TextSpan(
+                        text: Formatters.currency(day.revenue),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  );
+                }).toList(),
+              ),
+              getTouchedSpotIndicator: (barData, indicators) {
+                return indicators.map((index) {
+                  return TouchedSpotIndicatorData(
+                    FlLine(
+                      color: AppColors.primary.withValues(alpha: 0.3),
+                      strokeWidth: 2,
+                      dashArray: [4, 4],
                     ),
-                  ),
-                  borderData: FlBorderData(show: false),
-                  gridData: const FlGridData(show: false),
-                  barGroups: List.generate(dailySales.length, (i) {
-                    return BarChartGroupData(x: i, barRods: [
-                      BarChartRodData(
-                        toY: dailySales[i].unitsSold.toDouble(),
+                    FlDotData(
+                      getDotPainter: (spot, percent, bar, i) =>
+                          FlDotCirclePainter(
+                        radius: 6,
                         color: AppColors.primary,
-                        width: 16,
-                        borderRadius: const BorderRadius.vertical(
-                            top: Radius.circular(4)),
+                        strokeWidth: 3,
+                        strokeColor: context.appSurface,
                       ),
-                    ]);
-                  }),
-                ),
-              )
-            : Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.bar_chart_rounded,
-                        size: 40,
-                        color:
-                            context.appTextTertiary.withValues(alpha: 0.4)),
-                    const SizedBox(height: 12),
-                    Text('No sales in the last 7 days',
-                        style: AppTypography.bodySmall
-                            .copyWith(color: context.appTextTertiary)),
-                    const SizedBox(height: 4),
-                    Text(
-                        'Sales data will appear here once transactions are recorded',
-                        style: AppTypography.labelSmall
-                            .copyWith(color: context.appTextTertiary),
-                        textAlign: TextAlign.center),
-                  ],
+                    ),
+                  );
+                }).toList();
+              },
+            ),
+            gridData: FlGridData(
+              show: true,
+              drawVerticalLine: false,
+              horizontalInterval: chartMax / 4,
+              getDrawingHorizontalLine: (_) => FlLine(
+                color: context.appDivider.withValues(alpha: 0.5),
+                strokeWidth: 1,
+                dashArray: [3, 6],
+              ),
+            ),
+            borderData: FlBorderData(show: false),
+            titlesData: FlTitlesData(
+              leftTitles: const AxisTitles(
+                  sideTitles: SideTitles(showTitles: false)),
+              topTitles: const AxisTitles(
+                  sideTitles: SideTitles(showTitles: false)),
+              rightTitles: const AxisTitles(
+                  sideTitles: SideTitles(showTitles: false)),
+              bottomTitles: AxisTitles(
+                sideTitles: SideTitles(
+                  showTitles: true,
+                  reservedSize: 28,
+                  getTitlesWidget: (v, _) {
+                    final index = v.toInt();
+                    if (index < 0 || index >= dailySales.length) {
+                      return const SizedBox.shrink();
+                    }
+                    final isToday = index == dailySales.length - 1;
+                    final dayName =
+                        DateFormat('E').format(dailySales[index].date);
+                    return Padding(
+                       padding: const EdgeInsets.only(top: 10),
+                      child: Text(
+                        isToday ? 'Today' : dayName,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight:
+                              isToday ? FontWeight.w700 : FontWeight.w500,
+                          color: isToday
+                              ? AppColors.primary
+                              : context.appTextTertiary,
+                        ),
+                      ),
+                    );
+                  },
                 ),
               ),
+            ),
+            lineBarsData: [
+              LineChartBarData(
+                spots: List.generate(
+                  dailySales.length,
+                  (i) => FlSpot(i.toDouble(), dailySales[i].unitsSold.toDouble()),
+                ),
+                isCurved: true,
+                curveSmoothness: 0.35,
+                preventCurveOverShooting: true,
+                gradient: LinearGradient(
+                  colors: [
+                    AppColors.primaryLight,
+                    AppColors.primary,
+                  ],
+                ),
+                barWidth: 3.5,
+                isStrokeCapRound: true,
+                dotData: FlDotData(
+                  show: true,
+                  getDotPainter: (spot, percent, bar, index) {
+                    final isToday = index == dailySales.length - 1;
+                    return FlDotCirclePainter(
+                      radius: isToday ? 5 : 3.5,
+                      color: isToday ? AppColors.primary : context.appSurface,
+                      strokeWidth: isToday ? 0 : 2.5,
+                      strokeColor: AppColors.primary,
+                    );
+                  },
+                ),
+                belowBarData: BarAreaData(
+                  show: true,
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      AppColors.primary.withValues(alpha: 0.28),
+                      AppColors.primary.withValues(alpha: 0.0),
+                    ],
+                  ),
+                ),
+                shadow: Shadow(
+                  color: AppColors.primary.withValues(alpha: 0.35),
+                  blurRadius: 8,
+                ),
+              ),
+            ],
+          ),
+          duration: const Duration(milliseconds: 400),
+          curve: Curves.easeInOutCubic,
+        ),
       ),
     );
   }
