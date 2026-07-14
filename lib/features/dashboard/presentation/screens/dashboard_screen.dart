@@ -77,7 +77,7 @@ class DashboardScreen extends ConsumerWidget {
                           style: AppTypography.h2.copyWith(color: context.appTextPrimary)),
                       const SizedBox(height: 2),
                       Text(
-                        'Welcome back, ${user?.displayName.isNotEmpty == true ? user!.displayName : 'User'}',
+                        'Hi, ${user?.displayName.isNotEmpty == true ? user!.displayName : 'User'}',
                         style: AppTypography.bodyMedium
                             .copyWith(color: context.appTextSecondary),
                       ),
