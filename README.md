@@ -2,15 +2,6 @@
 
 A production-ready Flutter + Firebase mobile app for SMEs to manage products, stock, sales, barcode scanning, staff access, and business reporting.
 
-## Screenshots (Figma-matched screens)
-1. **Login** — Welcome Back screen with green branding
-2. **Registration** — Join ShopManager with role selection
-3. **Dashboard** — My Shop with stock levels, stats, quick actions
-4. **Scanner** — Camera-based barcode scanning with product lookup
-5. **New Sale** — Cart with quantity controls and discount
-6. **Transaction Logs** — Sales history with KPI cards
-7. **Edit Product** — Product form with image preview
-8. **Reporting** — Revenue cards, charts, top movers
 
 ## Tech Stack
 - **Flutter** (Dart) — Cross-platform mobile
@@ -182,22 +173,4 @@ flutter test                    # Unit & widget tests
 flutter test --coverage         # With coverage report
 ```
 
-## Safe To Publish Checklist
-Before pushing to GitHub, confirm all items below:
 
-1. `.env` and platform secret files are not tracked (`git status`).
-2. `android/app/google-services.json` is ignored or removed from tracking.
-3. `ios/Runner/GoogleService-Info.plist` and `macos/Runner/GoogleService-Info.plist` are ignored or removed from tracking.
-4. `android/key.properties` and any keystore files are not tracked.
-5. `functions/.env*` files are not tracked.
-6. `functions/node_modules` and build artifacts are not tracked.
-7. Run `flutter analyze` and `flutter test` before publishing.
-
-## Assumptions
-1. Single-shop-per-user model
-2. Default currency: USD (configurable in settings)
-3. English only (v1)
-4. Product images via Firebase Storage
-5. Operators/staff invited by Admin
-6. Material 3 design system
-7. Offline writes queued and synced on reconnect
