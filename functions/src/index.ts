@@ -6,6 +6,74 @@ import {onSchedule, ScheduledEvent} from "firebase-functions/v2/scheduler";
 admin.initializeApp();
 const db = admin.firestore();
 
+// ── Tax threshold constants (Nigeria Tax Act 2025) ──
+const SMALL_COMPANY_THRESHOLD = 100_000_000;
+const APPROACHING_RATIO = 0.85;
+
+/**
+ * Sends a push notification to every registered device for a shop,
+ * pruning any tokens that have expired or been uninstalled.
+ */
+async function sendPushToShop(
+  shopId: string,
+  title: string,
+  body: string,
+  data: Record<string, string> = {}
+): Promise<void> {
+  const tokensSnap = await db
+    .collection(`shops/${shopId}/fcmTokens`)
+    .get();
+
+  if (tokensSnap.empty) return;
+
+  const tokens = tokensSnap.docs.map((d) => d.id);
+
+  const response = await admin.messaging().sendEachForMulticast({
+    tokens,
+    notification: {title, body},
+    data,
+    android: {priority: "high"},
+    apns: {payload: {aps: {sound: "default"}}},
+  });
+
+  // Prune invalid tokens (uninstalled app, expired token, etc.)
+  const staleTokens: string[] = [];
+  response.responses.forEach((res, i) => {
+    if (
+      !res.success &&
+      (res.error?.code === "messaging/registration-token-not-registered" ||
+        res.error?.code === "messaging/invalid-registration-token")
+    ) {
+      staleTokens.push(tokens[i]);
+    }
+  });
+
+  await Promise.all(
+    staleTokens.map((t) =>
+      db.doc(`shops/${shopId}/fcmTokens/${t}`).delete()
+    )
+  );
+}
+
+/**
+ * Atomically claims a one-per-year notification slot on the shop's
+ * settings document, so concurrent writes from multiple staff devices
+ * never trigger the same alert twice.
+ */
+async function claimNotificationSlot(
+  settingsRef: admin.firestore.DocumentReference,
+  fieldName: string,
+  year: number
+): Promise<boolean> {
+  return db.runTransaction(async (txn) => {
+    const snap = await txn.get(settingsRef);
+    const alreadyNotifiedYear = snap.data()?.[fieldName] as number | undefined;
+    if (alreadyNotifiedYear === year) return false;
+    txn.set(settingsRef, {[fieldName]: year}, {merge: true});
+    return true;
+  });
+}
+
 /**
  * Validate and execute stock deduction atomically.
  * Prevents overselling via Firestore transaction.
@@ -130,39 +198,131 @@ export const validateStockDeduction = onCall(async (request: CallableRequest<any
 });
 
 /**
- * Check low stock on product write and create notification.
+ * Check low stock on product write — only fires on genuine transitions
+ * into a low/out-of-stock state, and sends a real FCM push.
  */
 export const checkLowStock = onDocumentWritten(
   "shops/{shopId}/products/{productId}",
   async (event: FirestoreEvent<Change<DocumentSnapshot> | undefined, {shopId: string; productId: string}>) => {
+    const before = event.data?.before?.data();
     const after = event.data?.after?.data();
     if (!after) return;
 
     const shopId = event.params.shopId;
+    const productId = event.params.productId;
     const quantity = after.quantity as number;
     const reorderLevel = after.reorderLevel as number;
     const productName = after.name as string;
 
-    if (quantity <= reorderLevel && quantity > 0) {
-      await db.collection(`shops/${shopId}/notifications`).add({
-        type: "low_stock",
-        title: "Low Stock Alert",
-        body: `${productName} is running low (${quantity} remaining)`,
-        data: {productId: event.params.productId},
-        read: false,
-        userId: null,
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
-    } else if (quantity <= 0) {
+    const wasLow = before
+      ? (before.quantity as number) <= (before.reorderLevel as number)
+      : false;
+    const wasOut = before ? (before.quantity as number) <= 0 : false;
+
+    const isOut = quantity <= 0;
+    const isLow = quantity <= reorderLevel && quantity > 0;
+
+    // Only act on a genuine transition INTO a low/out state — not on
+    // every write while the product remains low, and not when it's
+    // restocked back to normal.
+    if (isOut && !wasOut) {
       await db.collection(`shops/${shopId}/notifications`).add({
         type: "out_of_stock",
         title: "Out of Stock!",
         body: `${productName} is completely out of stock`,
-        data: {productId: event.params.productId},
+        data: {productId},
         read: false,
         userId: null,
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
       });
+      await sendPushToShop(
+        shopId,
+        "🚨 Out of Stock",
+        `${productName} has zero units left. Restock immediately.`,
+        {type: "out_of_stock", productId}
+      );
+    } else if (isLow && !wasLow) {
+      await db.collection(`shops/${shopId}/notifications`).add({
+        type: "low_stock",
+        title: "Low Stock Alert",
+        body: `${productName} is running low (${quantity} remaining)`,
+        data: {productId},
+        read: false,
+        userId: null,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      await sendPushToShop(
+        shopId,
+        "⚠️ Low Stock",
+        `${productName} is running low — only ${quantity} remaining.`,
+        {type: "low_stock", productId}
+      );
+    }
+  }
+);
+
+/**
+ * Check annual revenue against the Nigeria Tax Act 2025 small-company
+ * threshold on every sale transaction write. Sends FCM push at 85%
+ * approaching and 100% exceeded.
+ */
+export const checkTaxThreshold = onDocumentWritten(
+  "shops/{shopId}/transactions/{transactionId}",
+  async (event: FirestoreEvent<Change<DocumentSnapshot> | undefined, {shopId: string; transactionId: string}>) => {
+    const after = event.data?.after?.data();
+    if (!after || after.type !== "sale") return;
+
+    const shopId = event.params.shopId;
+    const year = new Date().getFullYear();
+    const yearStart = new Date(year, 0, 1);
+
+    const txSnap = await db
+      .collection(`shops/${shopId}/transactions`)
+      .where("type", "==", "sale")
+      .where("createdAt", ">=", yearStart)
+      .get();
+
+    const annualRevenue = txSnap.docs.reduce(
+      (sum, doc) => sum + ((doc.data().total as number) || 0),
+      0
+    );
+
+    const settingsRef = db.doc(`shops/${shopId}/settings/config`);
+
+    if (annualRevenue >= SMALL_COMPANY_THRESHOLD) {
+      const claimed = await claimNotificationSlot(
+        settingsRef, "taxThresholdNotified_exceeded", year
+      );
+      if (claimed) {
+        await db.collection(`shops/${shopId}/notifications`).add({
+          type: "tax_threshold",
+          title: "Annual Revenue Milestone Reached",
+          body: `Tracked revenue for ${year} has crossed ₦100,000,000. This may affect your small-company tax exemption status under the Nigeria Tax Act 2025. Consider consulting a tax professional about CIT registration and filing.`,
+          data: {},
+          read: false,
+          userId: null,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        await sendPushToShop(
+          shopId,
+          "📊 Annual Revenue Milestone Reached",
+          "Your shop has crossed ₦100,000,000 in tracked revenue this year — you may no longer qualify for small-company tax exemption. Consider speaking with a tax professional.",
+          {type: "tax_threshold"}
+        );
+      }
+    } else if (annualRevenue >= SMALL_COMPANY_THRESHOLD * APPROACHING_RATIO) {
+      const claimed = await claimNotificationSlot(
+        settingsRef, "taxThresholdNotified_approaching", year
+      );
+      if (claimed) {
+        const remaining = SMALL_COMPANY_THRESHOLD - annualRevenue;
+        await sendPushToShop(
+          shopId,
+          "📈 Approaching the Small-Company Tax Threshold",
+          `Your shop has recorded over ₦${(annualRevenue / 1_000_000).toFixed(1)}M in revenue this year — about ₦${(remaining / 1_000_000).toFixed(1)}M below the ₦100M small-company exemption limit.`,
+          {type: "tax_threshold_approaching"}
+        );
+      }
     }
   }
 );

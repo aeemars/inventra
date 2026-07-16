@@ -14,6 +14,7 @@ class FirestorePaths {
   static String scanHistory(String shopId) => 'shops/$shopId/scan_history';
   static String notifications(String shopId) => 'shops/$shopId/notifications';
   static String analyticsSnapshots(String shopId) => 'shops/$shopId/analytics_snapshots';
+  static String fcmTokens(String shopId) => 'shops/$shopId/fcmTokens';
 
   // ── Shop Documents ──
   static String shopSettings(String shopId) => 'shops/$shopId/settings/config';

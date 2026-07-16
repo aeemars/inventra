@@ -7,6 +7,8 @@ import '../../domain/entities/app_user.dart';
 import '../../domain/repositories/auth_repository.dart';
 import '../../data/repositories/auth_repository_impl.dart';
 import '../../../../core/errors/failures.dart';
+import '../../../../core/notifications/fcm_service.dart';
+import '../../../../shared/providers/firebase_providers.dart';
 
 // ── Repository Provider ──
 final authRepositoryProvider = Provider<AuthRepository>((ref) {
@@ -134,6 +136,10 @@ class AuthController extends StateNotifier<AuthState> {
   }
 
   Future<void> signOut() async {
+    final shopId = ref.read(currentShopIdProvider);
+    if (shopId != null) {
+      await FcmService.unregister(shopId);
+    }
     await _repository.signOut();
     state = AuthState.initial;
   }

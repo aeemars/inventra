@@ -6,12 +6,9 @@ import '../../features/analytics/presentation/controllers/annual_revenue_provide
 import '../../features/auth/presentation/controllers/auth_controller.dart';
 import '../../shared/providers/firebase_providers.dart';
 import '../../shared/models/notification_model.dart';
-import 'local_notification_service.dart';
 
 class TaxThresholdService {
   TaxThresholdService._();
-
-  static const _notificationId = 900001; // fixed id, unrelated to product-based ids
 
   static void watch(Ref ref) {
     ref.listen<double>(
@@ -25,7 +22,8 @@ class TaxThresholdService {
         if (current >= TaxPolicy.smallCompanyTurnoverThreshold) {
           await _tryNotifyThresholdCrossed(ref, shopId, year, current);
         } else if (current >= TaxPolicy.approachingThreshold) {
-          await _tryNotifyApproaching(ref, shopId, year, current);
+          // Approaching threshold — no in-app write needed,
+          // server-side Cloud Function handles the push.
         }
       },
       fireImmediately: true,
@@ -33,8 +31,8 @@ class TaxThresholdService {
   }
 
   /// Atomically checks and sets the shop's notified-year flag so that only
-  /// one device/session across the whole shop fires the push, even if
-  /// several staff members have the app open simultaneously.
+  /// one device/session across the whole shop fires the in-app notification,
+  /// even if several staff members have the app open simultaneously.
   static Future<bool> _claimNotificationSlot(
     String shopId,
     int year,
@@ -61,15 +59,9 @@ class TaxThresholdService {
     final claimed = await _claimNotificationSlot(shopId, year, 'exceeded');
     if (!claimed) return;
 
-    await LocalNotificationService.showTaxThresholdAlert(
-      id: _notificationId,
-      title: '📊 Annual Revenue Milestone Reached',
-      body: 'Your shop has crossed ₦100,000,000 in tracked revenue this year. '
-          'You may no longer qualify for small-company tax exemption under the '
-          'Nigeria Tax Act 2025 — consider speaking with a tax professional '
-          'about registering and filing your Companies Income Tax return.',
-    );
-
+    // Write to Firestore for in-app notification history.
+    // The actual push notification is now handled server-side via
+    // the checkTaxThreshold Cloud Function + FCM.
     final userId = ref.read(currentUserProvider)?.uid ?? '';
     final repo = ref.read(notificationRepositoryProvider);
     await repo.createNotification(
@@ -85,23 +77,6 @@ class TaxThresholdService {
         userId: userId,
         createdAt: DateTime.now(),
       ),
-    );
-  }
-
-  static Future<void> _tryNotifyApproaching(
-    Ref ref, String shopId, int year, double revenue,
-  ) async {
-    final claimed = await _claimNotificationSlot(shopId, year, 'approaching');
-    if (!claimed) return;
-
-    final remaining = TaxPolicy.smallCompanyTurnoverThreshold - revenue;
-    await LocalNotificationService.showTaxThresholdAlert(
-      id: _notificationId - 1,
-      title: '📈 Approaching the Small-Company Tax Threshold',
-      body: 'Your shop has recorded over ₦${(revenue / 1000000).toStringAsFixed(1)}M '
-          'in revenue this year — about ₦${(remaining / 1000000).toStringAsFixed(1)}M '
-          'below the ₦100M small-company exemption limit. Worth planning ahead '
-          'for potential tax registration.',
     );
   }
 }

@@ -1,10 +1,12 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hive_ce_flutter/hive_flutter.dart';
 import 'core/cache/hive_adapters.dart';
+import 'core/notifications/fcm_service.dart';
 import 'core/notifications/local_notification_service.dart';
 import 'firebase_options.dart';
 
@@ -24,6 +26,9 @@ Future<void> bootstrap() async {
       await Firebase.initializeApp(
         options: DefaultFirebaseOptions.currentPlatform,
       ).timeout(const Duration(seconds: 10));
+
+      // Register the FCM background handler as early as possible
+      FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
     } catch (e) {
       debugPrint('⚠️ Firebase init failed: $e');
     }
