@@ -124,21 +124,37 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen>
   }
 
   void _initCamera() {
-    _cameraController = MobileScannerController(
-      detectionSpeed: DetectionSpeed.unrestricted,
-      facing: CameraFacing.back,
-      torchEnabled: false,
-      formats: [
-        BarcodeFormat.ean13,
-        BarcodeFormat.ean8,
-        BarcodeFormat.upcA,
-        BarcodeFormat.upcE,
-        BarcodeFormat.code128,
-        BarcodeFormat.code39,
-        BarcodeFormat.qrCode,
-      ],
-    );
-    setState(() => _permState = _CameraPermState.granted);
+    try {
+      _cameraController = MobileScannerController(
+        detectionSpeed: DetectionSpeed.unrestricted,
+        facing: CameraFacing.back,
+        torchEnabled: false,
+        formats: [
+          BarcodeFormat.ean13,
+          BarcodeFormat.ean8,
+          BarcodeFormat.upcA,
+          BarcodeFormat.upcE,
+          BarcodeFormat.code128,
+          BarcodeFormat.code39,
+          BarcodeFormat.qrCode,
+        ],
+      );
+      setState(() => _permState = _CameraPermState.granted);
+    } catch (e) {
+      debugPrint('Scanner init failed: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Camera scanner failed to start. Make sure Google Play '
+              'Services is installed and up to date, then restart the app.',
+            ),
+            backgroundColor: AppColors.error,
+            duration: Duration(seconds: 5),
+          ),
+        );
+      }
+    }
   }
 
   // ── Barcode extraction & validation helpers ──
@@ -833,6 +849,30 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen>
             MobileScanner(
               controller: _cameraController!,
               onDetect: _onBarcodeDetected,
+              errorBuilder: (context, error) {
+                return Container(
+                  color: Colors.black,
+                  child: Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.error_outline_rounded,
+                              color: Colors.white54, size: 48),
+                          const SizedBox(height: 16),
+                          Text(
+                            'Scanner unavailable: ${error.errorCode.name}\n'
+                            'Ensure Google Play Services is installed and up to date.',
+                            style: const TextStyle(color: Colors.white70),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
             ),
 
           // ── Scan Overlay ──
