@@ -48,5 +48,8 @@ flutter {
 
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
+    // Bundled ML Kit barcode model — ships inside the APK so scanning
+    // works on first launch with no Play Services download needed.
+    implementation("com.google.mlkit:barcode-scanning:17.3.0")
 }
 
