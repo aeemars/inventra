@@ -1,4 +1,4 @@
-# Inventra — Smart Inventory Management
+# Inventra — Shop Management System
 
 A production-ready Flutter + Firebase mobile app for SMEs to manage products, stock, sales, barcode scanning, staff access, and business reporting.
 
