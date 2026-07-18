@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../features/auth/presentation/controllers/auth_controller.dart';
 import '../../features/auth/presentation/screens/login_screen.dart';
 import '../../features/auth/presentation/screens/forgot_password_screen.dart';
 import '../../features/auth/presentation/screens/profile_screen.dart';
+import '../../features/auth/presentation/screens/shop_setup_screen.dart';
 import '../../features/auth/presentation/screens/splash_screen.dart';
 
 import '../../features/dashboard/presentation/screens/dashboard_screen.dart';
@@ -25,12 +27,27 @@ import 'scanner_route_access.dart';
 final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     initialLocation: '/',
+    redirect: (context, state) {
+      final loc = state.matchedLocation;
+      // Don't redirect on splash, login, forgot-password, or shop-setup
+      const publicRoutes = ['/', '/login', '/forgot-password', '/shop-setup'];
+      if (publicRoutes.contains(loc)) return null;
+
+      final user = ref.read(currentUserProvider);
+      if (user != null && !user.hasShop) {
+        return '/shop-setup';
+      }
+      return null;
+    },
     routes: [
       GoRoute(path: '/', builder: (_, __) => const SplashScreen()),
       GoRoute(path: '/login', builder: (_, __) => const LoginScreen()),
       GoRoute(
           path: '/forgot-password',
           builder: (_, __) => const ForgotPasswordScreen()),
+      GoRoute(
+          path: '/shop-setup',
+          builder: (_, __) => const ShopSetupScreen()),
 
 
       // Main app with bottom nav

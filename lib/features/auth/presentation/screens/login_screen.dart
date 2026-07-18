@@ -62,14 +62,24 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
         );
 
     if (success && mounted) {
-      context.go('/dashboard');
+      final user = ref.read(currentUserProvider);
+      if (user != null && !user.hasShop) {
+        context.go('/shop-setup');
+      } else {
+        context.go('/dashboard');
+      }
     }
   }
 
   Future<void> _onGoogleSignIn() async {
     final success = await ref.read(authControllerProvider.notifier).signInWithGoogle();
     if (success && mounted) {
-      context.go('/dashboard');
+      final user = ref.read(currentUserProvider);
+      if (user != null && !user.hasShop) {
+        context.go('/shop-setup');
+      } else {
+        context.go('/dashboard');
+      }
     }
   }
 

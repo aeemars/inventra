@@ -304,4 +304,19 @@ class _UnavailableAuthRepository implements AuthRepository {
 
   @override
   Future<AppUser?> getUserById(String uid) async => null;
+
+  @override
+  Future<AppUser> registerWithEmail({
+    required String email,
+    required String password,
+    required String displayName,
+    required String shopName,
+  }) {
+    throw AuthFailure(message: message, code: 'auth-unavailable');
+  }
+
+  @override
+  Future<AppUser> createAndLinkShop({required String shopName}) {
+    throw AuthFailure(message: message, code: 'auth-unavailable');
+  }
 }

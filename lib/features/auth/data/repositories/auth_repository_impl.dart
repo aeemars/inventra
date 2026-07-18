@@ -8,8 +8,11 @@ import 'package:google_sign_in/google_sign_in.dart';
 import '../../../../core/constants/firestore_paths.dart';
 import '../../../../core/errors/failures.dart';
 import '../../domain/entities/app_user.dart';
+import '../../domain/entities/shop.dart';
 import '../../domain/repositories/auth_repository.dart';
+import '../models/shop_model.dart';
 import '../models/user_model.dart';
+import '../../../../shared/models/shop_settings_model.dart';
 
 class AuthRepositoryImpl implements AuthRepository {
   final FirebaseAuth _auth;
@@ -127,7 +130,9 @@ class AuthRepositoryImpl implements AuthRepository {
         _cachedUser = user;
         return user;
       } else {
-        // Brand new user: create Firestore document without shop
+        // Brand new user: create Firestore document without shop.
+        // Shop creation happens in a required follow-up step —
+        // see ShopSetupScreen, gated by AppUser.hasShop in the router.
         final userModel = UserModel(
           uid: uid,
           email: firebaseUser.email ?? '',
@@ -148,9 +153,8 @@ class AuthRepositoryImpl implements AuthRepository {
             .doc(uid)
             .set(userModel.toFirestore());
 
-        final user = userModel.toEntity();
-        _cachedUser = user;
-        return user;
+        _cachedUser = userModel.toEntity();
+        return userModel.toEntity();
       }
     } catch (e) {
       throw _handleException(e);
@@ -242,6 +246,111 @@ class AuthRepositoryImpl implements AuthRepository {
       return await _fetchUserProfile(uid);
     } catch (_) {
       return null;
+    }
+  }
+
+  @override
+  Future<AppUser> registerWithEmail({
+    required String email,
+    required String password,
+    required String displayName,
+    required String shopName,
+  }) async {
+    try {
+      final credential = await _auth.createUserWithEmailAndPassword(
+        email: email.trim(),
+        password: password,
+      );
+      final uid = credential.user!.uid;
+      await credential.user!.updateDisplayName(displayName.trim());
+      final now = DateTime.now();
+
+      // Create the shop first
+      final shopRef = _firestore.collection(FirestorePaths.shops).doc();
+      final shopModel = ShopModel.fromEntity(Shop(
+        id: shopRef.id,
+        name: shopName.trim(),
+        ownerId: uid,
+        email: email.trim(),
+        createdAt: now,
+        updatedAt: now,
+      ));
+      final settingsModel = ShopSettingsModel(updatedAt: now, updatedBy: uid);
+
+      final batch = _firestore.batch();
+      batch.set(shopRef, shopModel.toFirestore());
+      batch.set(
+        _firestore.doc(FirestorePaths.shopSettings(shopRef.id)),
+        settingsModel.toFirestore(),
+      );
+
+      // Create the user document WITH the shopId already set
+      final userModel = UserModel(
+        uid: uid,
+        email: email.trim(),
+        displayName: displayName.trim(),
+        shopId: shopRef.id,
+        shopName: shopName.trim(),
+        photoUrl: null,
+        isActive: true,
+        lastLoginAt: now,
+        createdAt: now,
+        updatedAt: now,
+        editPin: null,
+        editPinRecoveryCode: null,
+      );
+      batch.set(
+        _firestore.collection(FirestorePaths.users).doc(uid),
+        userModel.toFirestore(),
+      );
+
+      await batch.commit();
+
+      final user = userModel.toEntity();
+      _cachedUser = user;
+      return user;
+    } catch (e) {
+      throw _handleException(e);
+    }
+  }
+
+  @override
+  Future<AppUser> createAndLinkShop({required String shopName}) async {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) {
+      throw const AuthFailure(message: 'Not authenticated');
+    }
+    try {
+      final now = DateTime.now();
+      final shopRef = _firestore.collection(FirestorePaths.shops).doc();
+      final shopModel = ShopModel.fromEntity(Shop(
+        id: shopRef.id,
+        name: shopName.trim(),
+        ownerId: uid,
+        email: _auth.currentUser?.email,
+        createdAt: now,
+        updatedAt: now,
+      ));
+      final settingsModel = ShopSettingsModel(updatedAt: now, updatedBy: uid);
+
+      final batch = _firestore.batch();
+      batch.set(shopRef, shopModel.toFirestore());
+      batch.set(
+        _firestore.doc(FirestorePaths.shopSettings(shopRef.id)),
+        settingsModel.toFirestore(),
+      );
+      batch.update(_firestore.collection(FirestorePaths.users).doc(uid), {
+        'shopId': shopRef.id,
+        'shopName': shopName.trim(),
+        'updatedAt': Timestamp.fromDate(now),
+      });
+      await batch.commit();
+
+      final user = await _fetchUserProfile(uid);
+      _cachedUser = user;
+      return user;
+    } catch (e) {
+      throw _handleException(e);
     }
   }
 

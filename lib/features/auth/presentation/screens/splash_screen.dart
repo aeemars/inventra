@@ -86,7 +86,11 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     authState.when(
       data: (user) {
         if (user != null) {
-          context.go('/dashboard');
+          if (user.hasShop) {
+            context.go('/dashboard');
+          } else {
+            context.go('/shop-setup');
+          }
         } else {
           context.go('/login');
         }

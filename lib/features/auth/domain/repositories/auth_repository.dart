@@ -40,4 +40,18 @@ abstract class AuthRepository {
 
   /// Get user by UID
   Future<AppUser?> getUserById(String uid);
+
+  /// Register a new email/password account, create their shop, and link
+  /// the shop's ID onto the user document in one atomic-as-possible flow.
+  Future<AppUser> registerWithEmail({
+    required String email,
+    required String password,
+    required String displayName,
+    required String shopName,
+  });
+
+  /// For an existing signed-in account with no shop yet (shopId == null),
+  /// create a shop and link it. Used both for first-time Google Sign-In
+  /// users and as a self-repair path for accounts already stuck without one.
+  Future<AppUser> createAndLinkShop({required String shopName});
 }
