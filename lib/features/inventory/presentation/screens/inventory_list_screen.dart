@@ -442,6 +442,21 @@ void _showProductDetailSheet(BuildContext context, dynamic product) {
               ),
             if (product.description != null)
               _DetailRow(label: 'Description', value: product.description!),
+            const SizedBox(height: AppSizes.lg),
+            OutlinedButton.icon(
+              onPressed: () {
+                Navigator.pop(context);
+                context.push(
+                    '/inventory/print-labels?productId=${product.id}');
+              },
+              icon: const Icon(Icons.print_outlined, size: 18),
+              label: const Text('Print Barcode Label'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.primary,
+                side: const BorderSide(color: AppColors.primary),
+                minimumSize: const Size(double.infinity, 44),
+              ),
+            ),
           ],
         ),
       ),

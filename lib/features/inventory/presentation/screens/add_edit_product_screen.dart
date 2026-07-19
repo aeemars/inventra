@@ -388,6 +388,38 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
           backgroundColor: AppColors.success,
         ),
       );
+
+      // Offer to print label for auto-generated products
+      if (widget.autoGenerate && addedProduct != null && mounted) {
+        final shouldPrint = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Print Barcode Label?'),
+            content: Text(
+              '"${addedProduct!.name}" was created with code '
+              '${addedProduct.barcode ?? addedProduct.sku}. '
+              'Print a label now to stick on the product?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Later'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Print Now'),
+              ),
+            ],
+          ),
+        );
+        if (shouldPrint == true && mounted) {
+          context.push(
+              '/inventory/print-labels?productId=${addedProduct.id}');
+          return;
+        }
+      }
+
+      if (!mounted) return;
       if (widget.initialBarcode != null) {
         Navigator.pop(context, addedProduct ?? _existingProduct);
       } else {
