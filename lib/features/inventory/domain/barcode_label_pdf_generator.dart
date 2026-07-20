@@ -27,8 +27,8 @@ class BarcodeLabelPdfGenerator {
         for (var i = 0; i < item.copies; i++) item.product,
     ];
 
-    const perPage = 30; // 3 columns × 10 rows
-    const columns = 3;
+    const perPage = 20; // 2 columns × 10 rows
+    const columns = 2;
 
     for (var start = 0; start < labels.length; start += perPage) {
       final pageLabels = labels.skip(start).take(perPage).toList();
@@ -67,8 +67,8 @@ class BarcodeLabelPdfGenerator {
                       pw.BarcodeWidget(
                         barcode: barcodeGen,
                         data: code,
-                        width: 140,
-                        height: 45,
+                        width: 170,
+                        height: 55,
                         drawText: false,
                       ),
                       pw.SizedBox(height: 2),

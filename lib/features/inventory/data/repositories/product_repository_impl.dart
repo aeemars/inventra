@@ -299,12 +299,35 @@ class ProductRepositoryImpl implements ProductRepository {
         txn.set(counterRef, {'value': next}, SetOptions(merge: true));
         return next;
       });
-      return 'INV-$shopId-${newCount.toString().padLeft(6, '0')}';
+
+      // Derive a stable 6-digit numeric prefix from the shop ID — this
+      // keeps auto-generated barcodes unique across shops without
+      // embedding the full, long Firestore document ID into the printed
+      // barcode. All-numeric Code-128 encoding is roughly twice as dense
+      // as alphanumeric, so this keeps the printed barcode short enough
+      // to actually scan reliably at normal label sizes.
+      final shopPrefix = _numericShopPrefix(shopId);
+      final counterPart = newCount.toString().padLeft(6, '0');
+
+      return '$shopPrefix$counterPart'; // 12 digits total
     } on FirebaseException catch (e) {
       throw FirestoreFailure.fromCode(e.code, rawMessage: e.message);
     } catch (e) {
       throw handleFirestoreException(e, context: 'generate barcode');
     }
+  }
+
+  /// Deterministic 6-digit numeric code derived from a shop's Firestore
+  /// document ID. Same shopId always produces the same prefix, and
+  /// different shops produce different prefixes with negligible collision
+  /// probability (1 in 900,000).
+  String _numericShopPrefix(String shopId) {
+    var hash = 0;
+    for (final codeUnit in shopId.codeUnits) {
+      hash = (hash * 31 + codeUnit) & 0x7FFFFFFF;
+    }
+    final sixDigit = 100000 + (hash % 900000);
+    return sixDigit.toString();
   }
 
   // ── Categories ──
