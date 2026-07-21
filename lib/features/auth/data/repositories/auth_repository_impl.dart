@@ -40,10 +40,16 @@ class AuthRepositoryImpl implements AuthRepository {
           .collection(FirestorePaths.users)
           .doc(firebaseUser.uid)
           .snapshots()
-          .map((snapshot) {
+          .asyncMap((snapshot) async {
         if (!snapshot.exists) {
-          _cachedUser = null;
-          return null;
+          try {
+            final user = await _fetchUserProfile(firebaseUser.uid);
+            _cachedUser = user;
+            return user;
+          } catch (_) {
+            _cachedUser = null;
+            return null;
+          }
         }
         try {
           final user = UserModel.fromFirestore(snapshot).toEntity();
@@ -344,11 +350,15 @@ class AuthRepositoryImpl implements AuthRepository {
         _firestore.doc(FirestorePaths.shopSettings(shopRef.id)),
         settingsModel.toFirestore(),
       );
-      batch.update(_firestore.collection(FirestorePaths.users).doc(uid), {
-        'shopId': shopRef.id,
-        'shopName': shopName.trim(),
-        'updatedAt': Timestamp.fromDate(now),
-      });
+      batch.set(
+        _firestore.collection(FirestorePaths.users).doc(uid),
+        {
+          'shopId': shopRef.id,
+          'shopName': shopName.trim(),
+          'updatedAt': Timestamp.fromDate(now),
+        },
+        SetOptions(merge: true),
+      );
       await batch.commit();
 
       final user = await _fetchUserProfile(uid);
@@ -366,7 +376,32 @@ class AuthRepositoryImpl implements AuthRepository {
         .get();
 
     if (!doc.exists) {
-      throw const AuthFailure(message: 'User profile not found');
+      final firebaseUser = _auth.currentUser;
+      final now = DateTime.now();
+      final userModel = UserModel(
+        uid: uid,
+        email: firebaseUser?.email ?? '',
+        displayName: firebaseUser?.displayName ??
+            (firebaseUser?.email != null && firebaseUser!.email!.contains('@')
+                ? firebaseUser.email!.split('@').first
+                : 'User'),
+        shopId: null,
+        shopName: null,
+        photoUrl: firebaseUser?.photoURL,
+        isActive: true,
+        lastLoginAt: now,
+        createdAt: now,
+        updatedAt: now,
+        editPin: null,
+        editPinRecoveryCode: null,
+      );
+
+      await _firestore
+          .collection(FirestorePaths.users)
+          .doc(uid)
+          .set(userModel.toFirestore());
+
+      return userModel.toEntity();
     }
 
     return UserModel.fromFirestore(doc).toEntity();
