@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:firebase_core/firebase_core.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_sizes.dart';
 import '../../../../core/constants/app_typography.dart';
+import '../../../../core/errors/failures.dart';
 import '../../../../core/extensions/theme_ext.dart';
 import '../../../../core/widgets/app_button.dart';
 import '../../../../core/widgets/app_text_field.dart';
@@ -44,11 +46,12 @@ class _ShopSetupScreenState extends ConsumerState<ShopSetupScreen> {
     } catch (e) {
       setState(() => _isLoading = false);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Could not set up shop: $e'),
-            backgroundColor: AppColors.error,
-          ),
+        final message = e is Failure
+            ? e.message
+            : (e is FirebaseException ? (e.message ?? e.toString()) : e.toString());
+        context.showAppSnackBar(
+          message: 'Could not set up shop: $message',
+          type: AppSnackBarType.error,
         );
       }
     }

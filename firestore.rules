@@ -42,7 +42,7 @@ service cloud.firestore {
         && !('editPinRecoveryCode' in request.resource.data);
       allow update: if isOwner(uid)
         && (!request.resource.data.diff(resource.data).affectedKeys().hasAny([
-          'email', 'createdAt', 'shopId', 'shopName', 'isActive', 'role', 
+          'email', 'createdAt', 'isActive', 'role', 
           'editPin', 'editPinRecoveryCode'
         ]));
       allow delete: if false;
@@ -50,16 +50,16 @@ service cloud.firestore {
 
     // ── Shops Collection & Sub-collections ──
     match /shops/{shopId} {
-      allow get: if isShopMember(shopId);
+      allow get: if isShopMember(shopId) || (isSignedIn() && resource.data.ownerId == request.auth.uid);
       allow list: if false;
-      allow create: if false; // Only via backend Cloud Functions
-      allow update: if false; // Only via Cloud Functions
+      allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
+      allow update: if isShopMember(shopId) && hasRole(shopId, 'owner');
       allow delete: if false;
 
-      // Members Subcollection (Server-managed only)
+      // Members Subcollection
       match /members/{memberUid} {
-        allow read: if isShopMember(shopId);
-        allow write: if false; // Backend only
+        allow read: if isShopMember(shopId) || (isSignedIn() && request.auth.uid == memberUid);
+        allow write: if isSignedIn() && (request.auth.uid == memberUid || (isShopMember(shopId) && hasRole(shopId, 'owner')));
       }
 
       // Products Subcollection
@@ -130,10 +130,10 @@ service cloud.firestore {
         allow write: if hasAnyRole(shopId, ['owner', 'manager', 'cashier']);
       }
 
-      // Settings Subcollection (Backend owned)
+      // Settings Subcollection
       match /settings/{docId} {
         allow read: if isShopMember(shopId);
-        allow write: if false; // Backend callable function only
+        allow write: if isShopMember(shopId) || (isSignedIn() && request.auth.uid != null);
       }
 
       // FCM Tokens Subcollection

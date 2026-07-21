@@ -9,8 +9,11 @@ import 'package:google_sign_in/google_sign_in.dart';
 import '../../../../core/constants/firestore_paths.dart';
 import '../../../../core/errors/failures.dart';
 import '../../domain/entities/app_user.dart';
+import '../../domain/entities/shop.dart';
 import '../../domain/repositories/auth_repository.dart';
+import '../models/shop_model.dart';
 import '../models/user_model.dart';
+import '../../../../shared/models/shop_settings_model.dart';
 
 class AuthRepositoryImpl implements AuthRepository {
   final FirebaseAuth _auth;
@@ -310,10 +313,64 @@ class AuthRepositoryImpl implements AuthRepository {
       throw const AuthFailure(message: 'Not authenticated');
     }
     try {
-      final callable = _functions.httpsCallable('createShopAndOwner');
-      await callable.call({
-        'name': shopName.trim(),
-      });
+      bool createdViaFunction = false;
+      try {
+        final callable = _functions.httpsCallable('createShopAndOwner');
+        await callable.call({
+          'name': shopName.trim(),
+        });
+        createdViaFunction = true;
+      } catch (_) {
+        // Fallback: direct client setup if Cloud Functions are not deployed/available
+        createdViaFunction = false;
+      }
+
+      if (!createdViaFunction) {
+        final now = DateTime.now();
+        final shopRef = _firestore.collection(FirestorePaths.shops).doc();
+        final shopModel = ShopModel.fromEntity(Shop(
+          id: shopRef.id,
+          name: shopName.trim(),
+          ownerId: uid,
+          email: _auth.currentUser?.email,
+          createdAt: now,
+          updatedAt: now,
+        ));
+        final settingsModel = ShopSettingsModel(updatedAt: now, updatedBy: uid);
+
+        final batch = _firestore.batch();
+        batch.set(shopRef, shopModel.toFirestore());
+        batch.set(
+          _firestore.doc(FirestorePaths.shopSettings(shopRef.id)),
+          settingsModel.toFirestore(),
+        );
+        batch.set(
+          _firestore
+              .collection(FirestorePaths.shops)
+              .doc(shopRef.id)
+              .collection('members')
+              .doc(uid),
+          {
+            'uid': uid,
+            'role': 'owner',
+            'isActive': true,
+            'createdAt': Timestamp.fromDate(now),
+            'createdBy': uid,
+            'updatedAt': Timestamp.fromDate(now),
+            'updatedBy': uid,
+          },
+        );
+        batch.set(
+          _firestore.collection(FirestorePaths.users).doc(uid),
+          {
+            'shopId': shopRef.id,
+            'shopName': shopName.trim(),
+            'updatedAt': Timestamp.fromDate(now),
+          },
+          SetOptions(merge: true),
+        );
+        await batch.commit();
+      }
 
       final user = await _fetchUserProfile(uid);
       _cachedUser = user;
