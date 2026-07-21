@@ -56,7 +56,7 @@ class UserModel {
   }
 
   Map<String, dynamic> toFirestore() {
-    return {
+    final map = <String, dynamic>{
       'uid': uid,
       'email': email,
       'displayName': displayName,
@@ -69,9 +69,10 @@ class UserModel {
       'lastLoginAt': lastLoginAt != null ? Timestamp.fromDate(lastLoginAt!) : null,
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(updatedAt),
-      'editPin': editPin,
-      'editPinRecoveryCode': editPinRecoveryCode,
     };
+    if (editPin != null) map['editPin'] = editPin;
+    if (editPinRecoveryCode != null) map['editPinRecoveryCode'] = editPinRecoveryCode;
+    return map;
   }
 
   AppUser toEntity() {

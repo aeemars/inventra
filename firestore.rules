@@ -38,8 +38,8 @@ service cloud.firestore {
         && request.resource.data.email is string
         && request.resource.data.displayName is string
         && request.resource.data.displayName.size() < 100
-        && !('editPin' in request.resource.data)
-        && !('editPinRecoveryCode' in request.resource.data);
+        && (!('editPin' in request.resource.data) || request.resource.data.editPin == null)
+        && (!('editPinRecoveryCode' in request.resource.data) || request.resource.data.editPinRecoveryCode == null);
       allow update: if isOwner(uid)
         && (!request.resource.data.diff(resource.data).affectedKeys().hasAny([
           'email', 'createdAt', 'isActive', 'role', 
