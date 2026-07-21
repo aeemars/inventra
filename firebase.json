@@ -15,7 +15,8 @@
         ".git",
         "firebase-debug.log",
         "firebase-debug.*.log",
-        "*.local"
+        "*.local",
+        "package-lock.json"
       ]
     }
   ],
