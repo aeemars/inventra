@@ -2,12 +2,18 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../core/constants/firestore_paths.dart';
 import '../models/shop_settings_model.dart';
 
+import 'package:cloud_functions/cloud_functions.dart';
+
 /// Repository for shop settings (single document per shop)
 class SettingsRepository {
   final FirebaseFirestore _firestore;
+  final FirebaseFunctions _functions;
 
-  SettingsRepository({FirebaseFirestore? firestore})
-      : _firestore = firestore ?? FirebaseFirestore.instance;
+  SettingsRepository({
+    FirebaseFirestore? firestore,
+    FirebaseFunctions? functions,
+  })  : _firestore = firestore ?? FirebaseFirestore.instance,
+        _functions = functions ?? FirebaseFunctions.instance;
 
   /// Get current shop settings
   Future<ShopSettings> getSettings(String shopId) async {
@@ -33,21 +39,23 @@ class SettingsRepository {
     });
   }
 
-  /// Update shop settings (merge to avoid overwriting unrelated fields)
+  /// Update shop settings via Cloud Function
   Future<void> updateSettings(String shopId, ShopSettings settings) async {
     final model = ShopSettingsModel.fromEntity(settings);
-    await _firestore
-        .doc(FirestorePaths.shopSettings(shopId))
-        .set(model.toFirestore(), SetOptions(merge: true));
+    final callable = _functions.httpsCallable('updateShopSettings');
+    await callable.call({
+      'shopId': shopId,
+      'settings': model.toFirestore(),
+    });
   }
 
-  /// Update a single setting field
+  /// Update a single setting field via Cloud Function
   Future<void> updateField(
       String shopId, String field, dynamic value, String userId) async {
-    await _firestore.doc(FirestorePaths.shopSettings(shopId)).update({
-      field: value,
-      'updatedAt': FieldValue.serverTimestamp(),
-      'updatedBy': userId,
+    final callable = _functions.httpsCallable('updateShopSettings');
+    await callable.call({
+      'shopId': shopId,
+      'settings': {field: value},
     });
   }
 

@@ -65,15 +65,21 @@ class FcmService {
 
   static Future<void> _saveToken(
       String shopId, String uid, String token) async {
+    final platformName = defaultTargetPlatform.name.toLowerCase();
+    final cleanPlatform = ['ios', 'android', 'web'].contains(platformName)
+        ? platformName
+        : 'web';
+
     await FirebaseFirestore.instance
         .collection(FirestorePaths.fcmTokens(shopId))
         .doc(token)
         .set({
       'uid': uid,
       'token': token,
-      'platform': defaultTargetPlatform.name,
+      'platform': cleanPlatform,
       'updatedAt': FieldValue.serverTimestamp(),
-    });
+      'createdAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
   }
 
   /// Call on sign-out so a stale token isn't left registered to a shop

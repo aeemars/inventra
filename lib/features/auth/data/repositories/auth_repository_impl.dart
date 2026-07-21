@@ -1,8 +1,8 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/services.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import '../../../../core/constants/firestore_paths.dart';
@@ -217,23 +217,28 @@ class AuthRepositoryImpl implements AuthRepository {
   @override
   Future<String> uploadProfilePhoto(String filePath) async {
     try {
-      final file = File(filePath);
+      final uid = _auth.currentUser?.uid;
+      if (uid == null) throw const AuthFailure(message: 'Not authenticated');
 
+      final file = File(filePath);
       if (!await file.exists()) {
         throw const AuthFailure(message: 'Selected image file not found');
       }
 
-      final bytes = await file.readAsBytes();
+      final storageRef = FirebaseStorage.instance
+          .ref()
+          .child('profile_photos')
+          .child('$uid.jpg');
 
-      // Encode as base64 data URI (image is already compressed
-      // to 256x256 @ 60% quality by image_picker)
-      final base64Str = base64Encode(bytes);
-      final dataUri = 'data:image/jpeg;base64,$base64Str';
+      final uploadTask = await storageRef.putFile(
+        file,
+        SettableMetadata(contentType: 'image/jpeg'),
+      );
 
-      // Store in Firestore via the existing updateProfile method
-      await updateProfile(photoUrl: dataUri);
+      final downloadUrl = await uploadTask.ref.getDownloadURL();
+      await updateProfile(photoUrl: downloadUrl);
 
-      return dataUri;
+      return downloadUrl;
     } catch (e) {
       if (e is AuthFailure) rethrow;
       throw AuthFailure(message: 'Failed to upload photo: $e');

@@ -4,12 +4,37 @@ import '../../../../shared/models/stock_movement.dart';
 import '../models/transaction_model.dart';
 import '../../../../shared/models/stock_movement_model.dart';
 
+import 'package:cloud_functions/cloud_functions.dart';
+
 /// Repository for sales transactions and stock movement queries
 class TransactionRepository {
   final FirebaseFirestore _firestore;
+  final FirebaseFunctions _functions;
 
-  TransactionRepository({FirebaseFirestore? firestore})
-      : _firestore = firestore ?? FirebaseFirestore.instance;
+  TransactionRepository({
+    FirebaseFirestore? firestore,
+    FirebaseFunctions? functions,
+  })  : _firestore = firestore ?? FirebaseFirestore.instance,
+        _functions = functions ?? FirebaseFunctions.instance;
+
+  /// Process a sale via secure Cloud Function
+  Future<Map<String, dynamic>> processSale({
+    required String shopId,
+    required List<Map<String, dynamic>> items,
+    String paymentMethod = 'cash',
+    double discount = 0.0,
+    String? note,
+  }) async {
+    final callable = _functions.httpsCallable('validateStockDeduction');
+    final response = await callable.call({
+      'shopId': shopId,
+      'items': items,
+      'paymentMethod': paymentMethod,
+      'discount': discount,
+      'note': note,
+    });
+    return Map<String, dynamic>.from(response.data as Map);
+  }
 
   // ── Transactions ──
 

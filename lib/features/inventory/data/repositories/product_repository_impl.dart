@@ -7,11 +7,17 @@ import '../../domain/entities/category.dart';
 import '../../domain/repositories/product_repository.dart';
 import '../models/product_model.dart';
 
+import 'package:cloud_functions/cloud_functions.dart';
+
 class ProductRepositoryImpl implements ProductRepository {
   final FirebaseFirestore _firestore;
+  final FirebaseFunctions _functions;
 
-  ProductRepositoryImpl({FirebaseFirestore? firestore})
-      : _firestore = firestore ?? FirebaseFirestore.instance;
+  ProductRepositoryImpl({
+    FirebaseFirestore? firestore,
+    FirebaseFunctions? functions,
+  })  : _firestore = firestore ?? FirebaseFirestore.instance,
+        _functions = functions ?? FirebaseFunctions.instance;
 
   String _cleanLookup(String value) => value.trim();
 
@@ -223,38 +229,12 @@ class ProductRepositoryImpl implements ProductRepository {
     required String userId,
   }) async {
     try {
-      final productRef = _firestore
-          .collection(FirestorePaths.products(shopId))
-          .doc(productId);
-      final movementRef = _firestore
-          .collection(FirestorePaths.stockMovements(shopId))
-          .doc();
-
-      await _firestore.runTransaction((txn) async {
-        final snapshot = await txn.get(productRef);
-        if (!snapshot.exists) throw InventoryFailure.productNotFound();
-
-        final currentQty = (snapshot.data()!['quantity'] as num).toInt();
-        final newQty = currentQty + quantity;
-        final now = FieldValue.serverTimestamp();
-
-        txn.update(productRef, {'quantity': newQty, 'updatedAt': now});
-        txn.set(movementRef, {
-          'productId': productId,
-          'productName': productName,
-          'type': 'intake',
-          'quantityChange': quantity,
-          'quantityBefore': currentQty,
-          'quantityAfter': newQty,
-          'reason': 'Manual restock',
-          'userId': userId,
-          'userName': '',
-          'source': 'manual',
-          'createdAt': now,
-        });
+      final callable = _functions.httpsCallable('processRestock');
+      await callable.call({
+        'shopId': shopId,
+        'productId': productId,
+        'quantity': quantity,
       });
-    } on InventoryFailure {
-      rethrow;
     } on FirebaseException catch (e) {
       throw FirestoreFailure.fromCode(e.code, rawMessage: e.message);
     } catch (e) {

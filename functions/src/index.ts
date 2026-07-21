@@ -10,9 +10,55 @@ const db = admin.firestore();
 const SMALL_COMPANY_THRESHOLD = 100_000_000;
 const APPROACHING_RATIO = 0.85;
 
+// Allowed payment methods
+const ALLOWED_PAYMENT_METHODS = ["cash", "card", "transfer", "pos", "credit"];
+const ALLOWED_ROLES = ["owner", "manager", "cashier", "viewer"];
+
 /**
- * Sends a push notification to every registered device for a shop,
- * pruning any tokens that have expired or been uninstalled.
+ * Helper to check rate limiting / throttling.
+ * Window: 1 minute. Limit: max calls per window.
+ */
+async function checkRateLimit(uid: string, action: string, limit: number = 30): Promise<void> {
+  const now = Date.now();
+  const windowKey = Math.floor(now / 60000);
+  const ref = db.doc(`rate_limits/${uid}_${action}_${windowKey}`);
+  
+  await db.runTransaction(async (txn) => {
+    const snap = await txn.get(ref);
+    const count = snap.exists ? (snap.data()?.count || 0) : 0;
+    if (count >= limit) {
+      throw new HttpsError("resource-exhausted", `Rate limit exceeded for ${action}. Please try again shortly.`);
+    }
+    txn.set(ref, {count: count + 1, expiresAt: new Date(now + 120000)}, {merge: true});
+  });
+}
+
+/**
+ * Helper to verify shop membership & role from server-managed collection.
+ */
+async function verifyShopMember(
+  uid: string,
+  shopId: string,
+  allowedRoles: string[]
+): Promise<{role: string; name: string}> {
+  const memberDoc = await db.doc(`shops/${shopId}/members/${uid}`).get();
+  if (!memberDoc.exists || memberDoc.data()?.isActive !== true) {
+    throw new HttpsError("permission-denied", "Not an active member of this shop");
+  }
+
+  const memberData = memberDoc.data()!;
+  if (!allowedRoles.includes(memberData.role)) {
+    throw new HttpsError("permission-denied", `Role '${memberData.role}' is not authorized for this operation`);
+  }
+
+  const userDoc = await db.collection("users").doc(uid).get();
+  const name = userDoc.data()?.displayName || "Staff Member";
+
+  return {role: memberData.role, name};
+}
+
+/**
+ * Sends a push notification to every registered device for a shop.
  */
 async function sendPushToShop(
   shopId: string,
@@ -20,14 +66,10 @@ async function sendPushToShop(
   body: string,
   data: Record<string, string> = {}
 ): Promise<void> {
-  const tokensSnap = await db
-    .collection(`shops/${shopId}/fcmTokens`)
-    .get();
-
+  const tokensSnap = await db.collection(`shops/${shopId}/fcmTokens`).get();
   if (tokensSnap.empty) return;
 
   const tokens = tokensSnap.docs.map((d) => d.id);
-
   const response = await admin.messaging().sendEachForMulticast({
     tokens,
     notification: {title, body},
@@ -36,7 +78,6 @@ async function sendPushToShop(
     apns: {payload: {aps: {sound: "default"}}},
   });
 
-  // Prune invalid tokens (uninstalled app, expired token, etc.)
   const staleTokens: string[] = [];
   response.responses.forEach((res, i) => {
     if (
@@ -49,16 +90,12 @@ async function sendPushToShop(
   });
 
   await Promise.all(
-    staleTokens.map((t) =>
-      db.doc(`shops/${shopId}/fcmTokens/${t}`).delete()
-    )
+    staleTokens.map((t) => db.doc(`shops/${shopId}/fcmTokens/${t}`).delete())
   );
 }
 
 /**
- * Atomically claims a one-per-year notification slot on the shop's
- * settings document, so concurrent writes from multiple staff devices
- * never trigger the same alert twice.
+ * Atomically claims a one-per-year notification slot on shop settings.
  */
 async function claimNotificationSlot(
   settingsRef: admin.firestore.DocumentReference,
@@ -75,35 +112,140 @@ async function claimNotificationSlot(
 }
 
 /**
- * Validate and execute stock deduction atomically.
- * Prevents overselling via Firestore transaction.
+ * Callable function to create a new shop and bootstrap owner membership.
  */
-export const validateStockDeduction = onCall(async (request: CallableRequest<any>) => {
+export const createShopAndOwner = onCall({enforceAppCheck: false}, async (request: CallableRequest<any>) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Must be authenticated");
+  const uid = request.auth.uid;
+  const {name, currency, address, phone} = request.data || {};
+
+  if (!name || typeof name !== "string" || name.trim().length === 0 || name.length > 100) {
+    throw new HttpsError("invalid-argument", "Invalid shop name");
+  }
+
+  await checkRateLimit(uid, "createShopAndOwner", 5);
+
+  const shopRef = db.collection("shops").doc();
+  const memberRef = db.doc(`shops/${shopRef.id}/members/${uid}`);
+  const userRef = db.doc(`users/${uid}`);
+
+  await db.runTransaction(async (txn) => {
+    txn.set(shopRef, {
+      name: name.trim(),
+      currency: currency || "NGN",
+      address: address || "",
+      phone: phone || "",
+      ownerId: uid,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    txn.set(memberRef, {
+      uid,
+      role: "owner",
+      isActive: true,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdBy: uid,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedBy: uid,
+    });
+
+    // Denormalized display state only
+    txn.set(userRef, {
+      shopId: shopRef.id,
+      shopName: name.trim(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, {merge: true});
+  });
+
+  return {shopId: shopRef.id, message: "Shop created successfully"};
+});
+
+/**
+ * Callable function to manage shop members (owner only).
+ */
+export const manageShopMember = onCall({enforceAppCheck: false}, async (request: CallableRequest<any>) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Must be authenticated");
+  const uid = request.auth.uid;
+  const {shopId, targetUid, role, isActive} = request.data || {};
+
+  if (!shopId || !targetUid) {
+    throw new HttpsError("invalid-argument", "shopId and targetUid are required");
+  }
+
+  await verifyShopMember(uid, shopId, ["owner"]);
+  await checkRateLimit(uid, "manageShopMember", 20);
+
+  if (role && !ALLOWED_ROLES.includes(role)) {
+    throw new HttpsError("invalid-argument", "Invalid role specified");
+  }
+
+  const memberRef = db.doc(`shops/${shopId}/members/${targetUid}`);
+
+  await db.runTransaction(async (txn) => {
+    const snap = await txn.get(memberRef);
+    const updates: Record<string, any> = {
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedBy: uid,
+    };
+
+    if (role) updates.role = role;
+    if (typeof isActive === "boolean") updates.isActive = isActive;
+
+    if (!snap.exists) {
+      updates.uid = targetUid;
+      updates.role = role || "viewer";
+      updates.isActive = isActive ?? true;
+      updates.createdAt = admin.firestore.FieldValue.serverTimestamp();
+      updates.createdBy = uid;
+      txn.set(memberRef, updates);
+    } else {
+      txn.update(memberRef, updates);
+    }
+  });
+
+  return {success: true};
+});
+
+/**
+ * Validate and execute stock deduction atomically (Sales POS).
+ */
+export const validateStockDeduction = onCall({enforceAppCheck: false}, async (request: CallableRequest<any>) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "Must be authenticated");
   }
 
-  const {shopId, items, paymentMethod, discount, note} = request.data;
-
-  if (!shopId || !items || !Array.isArray(items) || items.length === 0) {
-    throw new HttpsError("invalid-argument", "Missing required fields");
-  }
-
   const uid = request.auth.uid;
-  const userDoc = await db.collection("users").doc(uid).get();
-  if (!userDoc.exists || userDoc.data()?.shopId !== shopId) {
-    throw new HttpsError("permission-denied", "Not authorized for this shop");
+  const {shopId, items, paymentMethod, discount, note} = request.data || {};
+
+  if (!shopId || typeof shopId !== "string" || !items || !Array.isArray(items) || items.length === 0) {
+    throw new HttpsError("invalid-argument", "Missing or invalid required fields");
   }
 
-  const userName = userDoc.data()?.displayName || "Unknown";
+  if (items.length > 50) {
+    throw new HttpsError("invalid-argument", "Transaction exceeds max limit of 50 items");
+  }
+
+  const {name: userName} = await verifyShopMember(uid, shopId, ["owner", "manager", "cashier"]);
+  await checkRateLimit(uid, "validateStockDeduction", 60);
+
+  const cleanPaymentMethod = ALLOWED_PAYMENT_METHODS.includes(paymentMethod) ? paymentMethod : "cash";
 
   try {
     const result = await db.runTransaction(async (transaction: admin.firestore.Transaction) => {
       let subtotal = 0;
       const productUpdates: {ref: admin.firestore.DocumentReference; newQty: number; product: any; qty: number}[] = [];
 
-      // Phase 1: Read all products and validate stock
+      // Read all products first
       for (const item of items) {
+        if (!item.productId || typeof item.productId !== "string") {
+          throw new HttpsError("invalid-argument", "Invalid productId in item list");
+        }
+
+        const qty = Number(item.quantity);
+        if (!Number.isInteger(qty) || qty <= 0 || qty > 10000) {
+          throw new HttpsError("invalid-argument", `Invalid item quantity: ${item.quantity}`);
+        }
+
         const productRef = db.doc(`shops/${shopId}/products/${item.productId}`);
         const productDoc = await transaction.get(productRef);
 
@@ -112,40 +254,44 @@ export const validateStockDeduction = onCall(async (request: CallableRequest<any
         }
 
         const product = productDoc.data()!;
-        const currentQty = product.quantity as number;
+        if (product.isActive !== true) {
+          throw new HttpsError("failed-precondition", `Product ${product.name} is not active`);
+        }
 
-        if (currentQty < item.quantity) {
+        const currentQty = (product.quantity as number) || 0;
+        if (currentQty < qty) {
           throw new HttpsError(
             "failed-precondition",
-            `Insufficient stock for ${product.name}. Available: ${currentQty}, Requested: ${item.quantity}`
+            `Insufficient stock for ${product.name}. Available: ${currentQty}, Requested: ${qty}`
           );
         }
 
-        const itemTotal = (product.sellingPrice as number) * item.quantity;
-        subtotal += itemTotal;
+        const unitPrice = (product.sellingPrice as number) || 0;
+        subtotal += unitPrice * qty;
 
         productUpdates.push({
           ref: productRef,
-          newQty: currentQty - item.quantity,
+          newQty: currentQty - qty,
           product,
-          qty: item.quantity,
+          qty,
         });
       }
 
-      // Calculate totals
-      const discountAmount = discount || 0;
-      const total = subtotal - discountAmount;
+      // Validate discount
+      const discountAmount = Number(discount) || 0;
+      if (isNaN(discountAmount) || discountAmount < 0 || discountAmount > subtotal) {
+        throw new HttpsError("invalid-argument", "Discount must be between 0 and subtotal");
+      }
 
-      // Phase 2: Write all updates
+      const total = subtotal - discountAmount;
       const transactionRef = db.collection(`shops/${shopId}/transactions`).doc();
 
-      // Create transaction record
       const transactionData = {
         type: "sale",
         items: productUpdates.map((u) => ({
           productId: u.ref.id,
           productName: u.product.name,
-          sku: u.product.sku,
+          sku: u.product.sku || "",
           quantity: u.qty,
           unitPrice: u.product.sellingPrice,
           totalPrice: u.product.sellingPrice * u.qty,
@@ -154,9 +300,9 @@ export const validateStockDeduction = onCall(async (request: CallableRequest<any
         discount: discountAmount,
         taxAmount: 0,
         total,
-        paymentMethod: paymentMethod || "cash",
+        paymentMethod: cleanPaymentMethod,
         status: "completed",
-        note: note || null,
+        note: (typeof note === "string" ? note.substring(0, 500) : null),
         createdBy: uid,
         createdByName: userName,
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -164,7 +310,6 @@ export const validateStockDeduction = onCall(async (request: CallableRequest<any
 
       transaction.set(transactionRef, transactionData);
 
-      // Update each product and create stock movement
       for (const update of productUpdates) {
         transaction.update(update.ref, {
           quantity: update.newQty,
@@ -187,6 +332,16 @@ export const validateStockDeduction = onCall(async (request: CallableRequest<any
         });
       }
 
+      // Increment daily aggregate revenue
+      const today = new Date().toISOString().split("T")[0];
+      const aggregateRef = db.doc(`shops/${shopId}/analytics_snapshots/${today}`);
+      transaction.set(aggregateRef, {
+        date: today,
+        totalSales: admin.firestore.FieldValue.increment(1),
+        totalRevenue: admin.firestore.FieldValue.increment(total),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, {merge: true});
+
       return {transactionId: transactionRef.id, total};
     });
 
@@ -198,8 +353,154 @@ export const validateStockDeduction = onCall(async (request: CallableRequest<any
 });
 
 /**
- * Check low stock on product write — only fires on genuine transitions
- * into a low/out-of-stock state, and sends a real FCM push.
+ * Callable function for restock operations (Owner/Manager only).
+ */
+export const processRestock = onCall({enforceAppCheck: false}, async (request: CallableRequest<any>) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Must be authenticated");
+  const uid = request.auth.uid;
+  const {shopId, productId, quantity, costPrice, supplier, note} = request.data || {};
+
+  if (!shopId || !productId) {
+    throw new HttpsError("invalid-argument", "shopId and productId are required");
+  }
+
+  const qty = Number(quantity);
+  if (!Number.isInteger(qty) || qty <= 0 || qty > 100000) {
+    throw new HttpsError("invalid-argument", "Restock quantity must be a positive integer");
+  }
+
+  const {name: userName} = await verifyShopMember(uid, shopId, ["owner", "manager"]);
+  await checkRateLimit(uid, "processRestock", 30);
+
+  const productRef = db.doc(`shops/${shopId}/products/${productId}`);
+
+  return db.runTransaction(async (txn) => {
+    const pSnap = await txn.get(productRef);
+    if (!pSnap.exists) throw new HttpsError("not-found", "Product not found");
+
+    const pData = pSnap.data()!;
+    const currentQty = (pData.quantity as number) || 0;
+    const newQty = currentQty + qty;
+
+    const updates: Record<string, any> = {
+      quantity: newQty,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+    if (typeof costPrice === "number" && costPrice >= 0) {
+      updates.costPrice = costPrice;
+    }
+
+    txn.update(productRef, updates);
+
+    const movementRef = db.collection(`shops/${shopId}/stock_movements`).doc();
+    txn.set(movementRef, {
+      productId,
+      productName: pData.name,
+      type: "restock",
+      quantityChange: qty,
+      quantityBefore: currentQty,
+      quantityAfter: newQty,
+      supplier: supplier || null,
+      note: note || null,
+      userId: uid,
+      userName,
+      source: "restock",
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    return {productId, newQuantity: newQty};
+  });
+});
+
+/**
+ * Callable function for stock adjustments (Owner/Manager only).
+ */
+export const processStockAdjustment = onCall({enforceAppCheck: false}, async (request: CallableRequest<any>) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Must be authenticated");
+  const uid = request.auth.uid;
+  const {shopId, productId, newQuantity, reason} = request.data || {};
+
+  if (!shopId || !productId) {
+    throw new HttpsError("invalid-argument", "shopId and productId are required");
+  }
+
+  const targetQty = Number(newQuantity);
+  if (!Number.isInteger(targetQty) || targetQty < 0 || targetQty > 1000000) {
+    throw new HttpsError("invalid-argument", "New quantity must be a non-negative integer");
+  }
+
+  const {name: userName} = await verifyShopMember(uid, shopId, ["owner", "manager"]);
+  await checkRateLimit(uid, "processStockAdjustment", 30);
+
+  const productRef = db.doc(`shops/${shopId}/products/${productId}`);
+
+  return db.runTransaction(async (txn) => {
+    const pSnap = await txn.get(productRef);
+    if (!pSnap.exists) throw new HttpsError("not-found", "Product not found");
+
+    const pData = pSnap.data()!;
+    const currentQty = (pData.quantity as number) || 0;
+    const diff = targetQty - currentQty;
+
+    txn.update(productRef, {
+      quantity: targetQty,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    const movementRef = db.collection(`shops/${shopId}/stock_movements`).doc();
+    txn.set(movementRef, {
+      productId,
+      productName: pData.name,
+      type: "adjustment",
+      quantityChange: diff,
+      quantityBefore: currentQty,
+      quantityAfter: targetQty,
+      reason: reason || "Stock Count Adjustment",
+      userId: uid,
+      userName,
+      source: "adjustment",
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    return {productId, newQuantity: targetQty};
+  });
+});
+
+/**
+ * Callable function to update shop settings (Owner only).
+ */
+export const updateShopSettings = onCall({enforceAppCheck: false}, async (request: CallableRequest<any>) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Must be authenticated");
+  const uid = request.auth.uid;
+  const {shopId, settings} = request.data || {};
+
+  if (!shopId || !settings || typeof settings !== "object") {
+    throw new HttpsError("invalid-argument", "shopId and settings object are required");
+  }
+
+  await verifyShopMember(uid, shopId, ["owner"]);
+  await checkRateLimit(uid, "updateShopSettings", 10);
+
+  const allowedFields = ["currency", "lowStockThreshold", "expiryAlertDays", "enableExpiryAlerts", "taxRate", "receiptHeader"];
+  const sanitized: Record<string, any> = {
+    updatedBy: uid,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  };
+
+  for (const key of Object.keys(settings)) {
+    if (allowedFields.includes(key)) {
+      sanitized[key] = settings[key];
+    }
+  }
+
+  const settingsRef = db.doc(`shops/${shopId}/settings/config`);
+  await settingsRef.set(sanitized, {merge: true});
+
+  return {success: true};
+});
+
+/**
+ * Check low stock on product write.
  */
 export const checkLowStock = onDocumentWritten(
   "shops/{shopId}/products/{productId}",
@@ -211,20 +512,15 @@ export const checkLowStock = onDocumentWritten(
     const shopId = event.params.shopId;
     const productId = event.params.productId;
     const quantity = after.quantity as number;
-    const reorderLevel = after.reorderLevel as number;
+    const reorderLevel = (after.reorderLevel as number) || 5;
     const productName = after.name as string;
 
-    const wasLow = before
-      ? (before.quantity as number) <= (before.reorderLevel as number)
-      : false;
+    const wasLow = before ? (before.quantity as number) <= ((before.reorderLevel as number) || 5) : false;
     const wasOut = before ? (before.quantity as number) <= 0 : false;
 
     const isOut = quantity <= 0;
     const isLow = quantity <= reorderLevel && quantity > 0;
 
-    // Only act on a genuine transition INTO a low/out state — not on
-    // every write while the product remains low, and not when it's
-    // restocked back to normal.
     if (isOut && !wasOut) {
       await db.collection(`shops/${shopId}/notifications`).add({
         type: "out_of_stock",
@@ -262,9 +558,8 @@ export const checkLowStock = onDocumentWritten(
 );
 
 /**
- * Check annual revenue against the Nigeria Tax Act 2025 small-company
- * threshold on every sale transaction write. Sends FCM push at 85%
- * approaching and 100% exceeded.
+ * Check annual revenue against Nigeria Tax Act 2025 small-company threshold.
+ * Uses daily/monthly aggregates to avoid reading all yearly transactions on every write.
  */
 export const checkTaxThreshold = onDocumentWritten(
   "shops/{shopId}/transactions/{transactionId}",
@@ -274,30 +569,28 @@ export const checkTaxThreshold = onDocumentWritten(
 
     const shopId = event.params.shopId;
     const year = new Date().getFullYear();
-    const yearStart = new Date(year, 0, 1);
 
-    const txSnap = await db
-      .collection(`shops/${shopId}/transactions`)
-      .where("type", "==", "sale")
-      .where("createdAt", ">=", yearStart)
+    // Query daily aggregate snapshots for the current year
+    const snapshots = await db
+      .collection(`shops/${shopId}/analytics_snapshots`)
+      .where("date", ">=", `${year}-01-01`)
+      .where("date", "<=", `${year}-12-31`)
       .get();
 
-    const annualRevenue = txSnap.docs.reduce(
-      (sum, doc) => sum + ((doc.data().total as number) || 0),
+    const annualRevenue = snapshots.docs.reduce(
+      (sum, doc) => sum + ((doc.data().totalRevenue as number) || 0),
       0
     );
 
     const settingsRef = db.doc(`shops/${shopId}/settings/config`);
 
     if (annualRevenue >= SMALL_COMPANY_THRESHOLD) {
-      const claimed = await claimNotificationSlot(
-        settingsRef, "taxThresholdNotified_exceeded", year
-      );
+      const claimed = await claimNotificationSlot(settingsRef, "taxThresholdNotified_exceeded", year);
       if (claimed) {
         await db.collection(`shops/${shopId}/notifications`).add({
           type: "tax_threshold",
           title: "Annual Revenue Milestone Reached",
-          body: `Tracked revenue for ${year} has crossed ₦100,000,000. This may affect your small-company tax exemption status under the Nigeria Tax Act 2025. Consider consulting a tax professional about CIT registration and filing.`,
+          body: `Tracked revenue for ${year} has crossed ₦100,000,000.`,
           data: {},
           read: false,
           userId: null,
@@ -306,20 +599,18 @@ export const checkTaxThreshold = onDocumentWritten(
         await sendPushToShop(
           shopId,
           "📊 Annual Revenue Milestone Reached",
-          "Your shop has crossed ₦100,000,000 in tracked revenue this year — you may no longer qualify for small-company tax exemption. Consider speaking with a tax professional.",
+          "Your shop has crossed ₦100,000,000 in tracked revenue this year.",
           {type: "tax_threshold"}
         );
       }
     } else if (annualRevenue >= SMALL_COMPANY_THRESHOLD * APPROACHING_RATIO) {
-      const claimed = await claimNotificationSlot(
-        settingsRef, "taxThresholdNotified_approaching", year
-      );
+      const claimed = await claimNotificationSlot(settingsRef, "taxThresholdNotified_approaching", year);
       if (claimed) {
         const remaining = SMALL_COMPANY_THRESHOLD - annualRevenue;
         await sendPushToShop(
           shopId,
-          "📈 Approaching the Small-Company Tax Threshold",
-          `Your shop has recorded over ₦${(annualRevenue / 1_000_000).toFixed(1)}M in revenue this year — about ₦${(remaining / 1_000_000).toFixed(1)}M below the ₦100M small-company exemption limit.`,
+          "📈 Approaching Small-Company Tax Threshold",
+          `Your shop has recorded over ₦${(annualRevenue / 1_000_000).toFixed(1)}M in revenue this year — about ₦${(remaining / 1_000_000).toFixed(1)}M below the limit.`,
           {type: "tax_threshold_approaching"}
         );
       }
@@ -328,7 +619,7 @@ export const checkTaxThreshold = onDocumentWritten(
 );
 
 /**
- * Check for products nearing expiry (runs daily at 06:00 UTC).
+ * Check for expiring products (daily at 06:00 UTC).
  */
 export const checkExpiringProducts = onSchedule(
   {schedule: "every day 06:00", timeZone: "UTC"},
@@ -337,14 +628,10 @@ export const checkExpiringProducts = onSchedule(
 
     for (const shopDoc of shopsSnapshot.docs) {
       const shopId = shopDoc.id;
-
-      // Get shop settings for expiry alert configuration
       const settingsDoc = await db.doc(`shops/${shopId}/settings/config`).get();
       const settings = settingsDoc.data();
       const alertDays = (settings?.expiryAlertDays as number) || 30;
-      const enableExpiryAlerts = settings?.enableExpiryAlerts !== false;
-
-      if (!enableExpiryAlerts) continue;
+      if (settings?.enableExpiryAlerts === false) continue;
 
       const alertDate = new Date();
       alertDate.setDate(alertDate.getDate() + alertDays);
@@ -357,28 +644,14 @@ export const checkExpiringProducts = onSchedule(
       for (const productDoc of productsSnapshot.docs) {
         const product = productDoc.data();
         const expiryDate = product.expiryDate?.toDate?.();
-
         if (!expiryDate) continue;
 
         if (expiryDate <= alertDate && expiryDate > new Date()) {
-          const daysUntilExpiry = Math.ceil(
-            (expiryDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)
-          );
-
+          const daysUntilExpiry = Math.ceil((expiryDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
           await db.collection(`shops/${shopId}/notifications`).add({
             type: "expiry_warning",
             title: "Expiry Warning",
-            body: `${product.name} expires in ${daysUntilExpiry} day${daysUntilExpiry === 1 ? "" : "s"}`,
-            data: {productId: productDoc.id, expiryDate: expiryDate.toISOString()},
-            read: false,
-            userId: null,
-            createdAt: admin.firestore.FieldValue.serverTimestamp(),
-          });
-        } else if (expiryDate <= new Date()) {
-          await db.collection(`shops/${shopId}/notifications`).add({
-            type: "expiry_warning",
-            title: "Product Expired!",
-            body: `${product.name} has expired`,
+            body: `${product.name} expires in ${daysUntilExpiry} day(s)`,
             data: {productId: productDoc.id, expiryDate: expiryDate.toISOString()},
             read: false,
             userId: null,
@@ -391,7 +664,7 @@ export const checkExpiringProducts = onSchedule(
 );
 
 /**
- * Update category product count when a product is created, updated, or deleted.
+ * Update category product count on product changes.
  */
 export const updateCategoryProductCount = onDocumentWritten(
   "shops/{shopId}/products/{productId}",
@@ -400,105 +673,97 @@ export const updateCategoryProductCount = onDocumentWritten(
     const after = event.data?.after?.data();
     const shopId = event.params.shopId;
 
-    const beforeCategoryId = before?.categoryId as string | null;
-    const afterCategoryId = after?.categoryId as string | null;
+    const beforeCatId = before?.categoryId as string | null;
+    const afterCatId = after?.categoryId as string | null;
 
-    // If category didn't change, nothing to do
-    if (beforeCategoryId === afterCategoryId) return;
+    if (beforeCatId === afterCatId) return;
 
     const batch = db.batch();
-
-    // Decrement old category count
-    if (beforeCategoryId) {
-      const oldCatRef = db.doc(`shops/${shopId}/categories/${beforeCategoryId}`);
-      batch.update(oldCatRef, {
+    if (beforeCatId) {
+      batch.update(db.doc(`shops/${shopId}/categories/${beforeCatId}`), {
         productCount: admin.firestore.FieldValue.increment(-1),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
     }
-
-    // Increment new category count
-    if (afterCategoryId) {
-      const newCatRef = db.doc(`shops/${shopId}/categories/${afterCategoryId}`);
-      batch.update(newCatRef, {
+    if (afterCatId) {
+      batch.update(db.doc(`shops/${shopId}/categories/${afterCatId}`), {
         productCount: admin.firestore.FieldValue.increment(1),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
     }
-
     await batch.commit();
   }
 );
 
 /**
- * Daily analytics aggregation (runs at midnight UTC).
+ * Daily analytics aggregation.
  */
 export const aggregateDailySales = onSchedule(
   {schedule: "every day 00:00", timeZone: "UTC"},
   async (_event: ScheduledEvent) => {
-  const shopsSnapshot = await db.collection("shops").get();
+    const shopsSnapshot = await db.collection("shops").get();
 
-  for (const shopDoc of shopsSnapshot.docs) {
-    const shopId = shopDoc.id;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
+    for (const shopDoc of shopsSnapshot.docs) {
+      const shopId = shopDoc.id;
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
 
-    const transactionsSnapshot = await db
-      .collection(`shops/${shopId}/transactions`)
-      .where("createdAt", ">=", today)
-      .where("createdAt", "<", tomorrow)
-      .where("status", "==", "completed")
-      .get();
+      const transactionsSnapshot = await db
+        .collection(`shops/${shopId}/transactions`)
+        .where("createdAt", ">=", today)
+        .where("createdAt", "<", tomorrow)
+        .where("status", "==", "completed")
+        .get();
 
-    let totalSales = 0;
-    let totalRevenue = 0;
-    const productSales: Record<string, {name: string; qty: number; revenue: number}> = {};
+      let totalSales = 0;
+      let totalRevenue = 0;
+      const productSales: Record<string, {name: string; qty: number; revenue: number}> = {};
 
-    for (const txDoc of transactionsSnapshot.docs) {
-      const tx = txDoc.data();
-      totalSales++;
-      totalRevenue += tx.total;
+      for (const txDoc of transactionsSnapshot.docs) {
+        const tx = txDoc.data();
+        totalSales++;
+        totalRevenue += tx.total || 0;
 
-      for (const item of tx.items || []) {
-        if (!productSales[item.productId]) {
-          productSales[item.productId] = {name: item.productName, qty: 0, revenue: 0};
+        for (const item of tx.items || []) {
+          if (!productSales[item.productId]) {
+            productSales[item.productId] = {name: item.productName, qty: 0, revenue: 0};
+          }
+          productSales[item.productId].qty += item.quantity;
+          productSales[item.productId].revenue += item.totalPrice;
         }
-        productSales[item.productId].qty += item.quantity;
-        productSales[item.productId].revenue += item.totalPrice;
       }
+
+      const topProducts = Object.entries(productSales)
+        .sort(([, a], [, b]) => b.revenue - a.revenue)
+        .slice(0, 10)
+        .map(([id, data]) => ({productId: id, ...data}));
+
+      const productsSnapshot = await db
+        .collection(`shops/${shopId}/products`)
+        .where("isActive", "==", true)
+        .get();
+
+      let lowStockCount = 0;
+      let inventoryValue = 0;
+      for (const pDoc of productsSnapshot.docs) {
+        const p = pDoc.data();
+        if ((p.quantity || 0) <= (p.reorderLevel || 5)) lowStockCount++;
+        inventoryValue += (p.costPrice || 0) * (p.quantity || 0);
+      }
+
+      const dateKey = today.toISOString().split("T")[0];
+      await db.doc(`shops/${shopId}/analytics_snapshots/${dateKey}`).set({
+        date: today,
+        totalSales,
+        totalRevenue,
+        totalTransactions: totalSales,
+        topProducts,
+        inventoryValue,
+        lowStockCount,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
     }
-
-    const topProducts = Object.entries(productSales)
-      .sort(([, a], [, b]) => b.revenue - a.revenue)
-      .slice(0, 10)
-      .map(([id, data]) => ({productId: id, ...data}));
-
-    // Get low stock count and inventory value
-    const productsSnapshot = await db
-      .collection(`shops/${shopId}/products`)
-      .where("isActive", "==", true)
-      .get();
-
-    let lowStockCount = 0;
-    let inventoryValue = 0;
-    for (const pDoc of productsSnapshot.docs) {
-      const p = pDoc.data();
-      if (p.quantity <= p.reorderLevel) lowStockCount++;
-      inventoryValue += (p.costPrice || 0) * (p.quantity || 0);
-    }
-
-    const dateKey = today.toISOString().split("T")[0];
-    await db.doc(`shops/${shopId}/analytics_snapshots/${dateKey}`).set({
-      date: today,
-      totalSales,
-      totalRevenue,
-      totalTransactions: totalSales,
-      topProducts,
-      inventoryValue,
-      lowStockCount,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
   }
-});
+);

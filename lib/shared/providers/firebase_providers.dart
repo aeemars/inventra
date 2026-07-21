@@ -8,6 +8,9 @@ import '../repositories/analytics_repository.dart';
 import '../repositories/settings_repository.dart';
 import '../../features/auth/presentation/controllers/auth_controller.dart';
 
+import 'package:cloud_functions/cloud_functions.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+
 // ── Core Firebase Providers ──
 
 /// Firebase Auth instance provider
@@ -18,6 +21,16 @@ final firebaseAuthProvider = Provider<FirebaseAuth>((ref) {
 /// Cloud Firestore instance provider
 final firestoreProvider = Provider<FirebaseFirestore>((ref) {
   return FirebaseFirestore.instance;
+});
+
+/// Firebase Functions instance provider
+final functionsProvider = Provider<FirebaseFunctions>((ref) {
+  return FirebaseFunctions.instance;
+});
+
+/// Firebase Storage instance provider
+final firebaseStorageProvider = Provider<FirebaseStorage>((ref) {
+  return FirebaseStorage.instance;
 });
 
 // ── Repository Providers ──

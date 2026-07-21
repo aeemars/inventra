@@ -10,15 +10,24 @@ service cloud.firestore {
     function isOwner(uid) {
       return isSignedIn() && request.auth.uid == uid;
     }
-    
-    function getUserData() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+
+    // Member helper functions (reads from /shops/{shopId}/members/{uid})
+    function getMemberData(shopId) {
+      return get(/databases/$(database)/documents/shops/$(shopId)/members/$(request.auth.uid)).data;
     }
-    
-    function userBelongsToShop(shopId) {
-      return isSignedIn() && (
-        getUserData().shopId == shopId
-      );
+
+    function isShopMember(shopId) {
+      return isSignedIn() && 
+        exists(/databases/$(database)/documents/shops/$(shopId)/members/$(request.auth.uid)) &&
+        getMemberData(shopId).isActive == true;
+    }
+
+    function hasRole(shopId, role) {
+      return isShopMember(shopId) && getMemberData(shopId).role == role;
+    }
+
+    function hasAnyRole(shopId, roles) {
+      return isShopMember(shopId) && getMemberData(shopId).role in roles;
     }
 
     // ── Users Collection ──
@@ -28,87 +37,114 @@ service cloud.firestore {
       allow create: if isOwner(uid) 
         && request.resource.data.email is string
         && request.resource.data.displayName is string
-        && request.resource.data.displayName.size() < 100;
+        && request.resource.data.displayName.size() < 100
+        && !('editPin' in request.resource.data)
+        && !('editPinRecoveryCode' in request.resource.data);
       allow update: if isOwner(uid)
-        && (request.resource.data.displayName is string && request.resource.data.displayName.size() < 100)
-        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['email', 'createdAt']));
+        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          'email', 'createdAt', 'shopId', 'shopName', 'isActive', 'role', 
+          'editPin', 'editPinRecoveryCode'
+        ]));
       allow delete: if false;
     }
 
     // ── Shops Collection & Sub-collections ──
     match /shops/{shopId} {
-      allow get: if isSignedIn() && userBelongsToShop(shopId);
+      allow get: if isShopMember(shopId);
       allow list: if false;
-      allow create: if isSignedIn() 
-        && request.resource.data.name is string 
-        && request.resource.data.name.size() < 100
-        && request.resource.data.ownerId == request.auth.uid;
-      allow update: if isSignedIn() && userBelongsToShop(shopId)
-        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['ownerId', 'createdAt']));
+      allow create: if false; // Only via backend Cloud Functions
+      allow update: if false; // Only via Cloud Functions
       allow delete: if false;
+
+      // Members Subcollection (Server-managed only)
+      match /members/{memberUid} {
+        allow read: if isShopMember(shopId);
+        allow write: if false; // Backend only
+      }
 
       // Products Subcollection
       match /products/{productId} {
-        allow read: if isSignedIn() && userBelongsToShop(shopId);
-        allow create: if isSignedIn() && userBelongsToShop(shopId)
+        allow read: if isShopMember(shopId);
+        allow create: if hasAnyRole(shopId, ['owner', 'manager'])
           && request.resource.data.name is string
+          && request.resource.data.name.size() > 0
           && request.resource.data.name.size() < 150
           && request.resource.data.sellingPrice is number
-          && request.resource.data.sellingPrice >= 0;
-        allow update: if isSignedIn() && userBelongsToShop(shopId)
+          && request.resource.data.sellingPrice >= 0
+          && (!('costPrice' in request.resource.data) || request.resource.data.costPrice >= 0)
+          && (!('quantity' in request.resource.data) || request.resource.data.quantity is number)
+          && request.resource.data.isActive == true;
+        allow update: if hasAnyRole(shopId, ['owner', 'manager'])
           && request.resource.data.name is string
+          && request.resource.data.name.size() > 0
           && request.resource.data.name.size() < 150
           && request.resource.data.sellingPrice is number
-          && request.resource.data.sellingPrice >= 0;
-        allow delete: if isSignedIn() && userBelongsToShop(shopId);
+          && request.resource.data.sellingPrice >= 0
+          && (!('costPrice' in request.resource.data) || request.resource.data.costPrice >= 0)
+          && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['createdAt']));
+        allow delete: if hasRole(shopId, 'owner');
       }
 
       // Categories Subcollection
       match /categories/{categoryId} {
-        allow read: if isSignedIn() && userBelongsToShop(shopId);
-        allow write: if isSignedIn() && userBelongsToShop(shopId);
+        allow read: if isShopMember(shopId);
+        allow write: if hasAnyRole(shopId, ['owner', 'manager']);
       }
 
-      // Transactions Subcollection
+      // Transactions Subcollection (Audit collection — Direct write DENIED)
       match /transactions/{transactionId} {
-        allow read: if isSignedIn() && userBelongsToShop(shopId);
-        allow write: if isSignedIn() && userBelongsToShop(shopId);
+        allow read: if hasAnyRole(shopId, ['owner', 'manager', 'cashier']);
+        allow write: if false; // Backend only
       }
 
-      // Stock Movements Subcollection
+      // Stock Movements Subcollection (Audit collection — Direct write DENIED)
       match /stock_movements/{movementId} {
-        allow read: if isSignedIn() && userBelongsToShop(shopId);
-        allow write: if isSignedIn() && userBelongsToShop(shopId);
+        allow read: if hasAnyRole(shopId, ['owner', 'manager']);
+        allow write: if false; // Backend only
       }
 
       // Scan History Subcollection
       match /scan_history/{scanId} {
-        allow read: if isSignedIn() && userBelongsToShop(shopId);
-        allow write: if isSignedIn() && userBelongsToShop(shopId);
+        allow read: if isShopMember(shopId);
+        allow create: if hasAnyRole(shopId, ['owner', 'manager', 'cashier']);
+        allow update, delete: if false;
       }
 
-      // Notifications Subcollection
+      // Notifications Subcollection (System generated — Direct create/delete DENIED, read allowed, update for 'read' flag only)
       match /notifications/{notificationId} {
-        allow read: if isSignedIn() && userBelongsToShop(shopId);
-        allow write: if isSignedIn() && userBelongsToShop(shopId);
+        allow read: if isShopMember(shopId);
+        allow create, delete: if false; // Backend only
+        allow update: if isShopMember(shopId)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
       }
 
-      // Analytics Snapshots Subcollection
+      // Analytics Snapshots Subcollection (Backend owned)
       match /analytics_snapshots/{dateKey} {
-        allow read: if isSignedIn() && userBelongsToShop(shopId);
-        allow write: if isSignedIn() && userBelongsToShop(shopId);
+        allow read: if hasAnyRole(shopId, ['owner', 'manager']);
+        allow write: if false; // Backend only
       }
 
       // In Demand Subcollection
       match /in_demand/{demandId} {
-        allow read: if isSignedIn() && userBelongsToShop(shopId);
-        allow write: if isSignedIn() && userBelongsToShop(shopId);
+        allow read: if isShopMember(shopId);
+        allow write: if hasAnyRole(shopId, ['owner', 'manager', 'cashier']);
       }
 
-      // Settings Subcollection
+      // Settings Subcollection (Backend owned)
       match /settings/{docId} {
-        allow read: if isSignedIn() && userBelongsToShop(shopId);
-        allow write: if isSignedIn() && (userBelongsToShop(shopId) || request.resource.data.updatedBy == request.auth.uid);
+        allow read: if isShopMember(shopId);
+        allow write: if false; // Backend callable function only
+      }
+
+      // FCM Tokens Subcollection
+      match /fcmTokens/{tokenId} {
+        allow read: if isShopMember(shopId);
+        allow create, update: if isShopMember(shopId)
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.platform in ['ios', 'android', 'web']
+          && request.resource.data.keys().hasOnly(['uid', 'token', 'platform', 'updatedAt', 'createdAt']);
+        allow delete: if isShopMember(shopId)
+          && (resource.data.uid == request.auth.uid || hasRole(shopId, 'owner'));
       }
     }
   }

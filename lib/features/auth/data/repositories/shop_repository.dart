@@ -4,48 +4,43 @@ import '../../domain/entities/shop.dart';
 import '../models/shop_model.dart';
 import '../../../../shared/models/shop_settings_model.dart';
 
+import 'package:cloud_functions/cloud_functions.dart';
+
 /// Repository for shop-level operations
 class ShopRepository {
   final FirebaseFirestore _firestore;
+  final FirebaseFunctions _functions;
 
-  ShopRepository({FirebaseFirestore? firestore})
-      : _firestore = firestore ?? FirebaseFirestore.instance;
+  ShopRepository({
+    FirebaseFirestore? firestore,
+    FirebaseFunctions? functions,
+  })  : _firestore = firestore ?? FirebaseFirestore.instance,
+        _functions = functions ?? FirebaseFunctions.instance;
 
-  /// Create a new shop and initialize its settings sub-document.
+  /// Create a new shop and initialize its owner membership document via Cloud Function.
   /// Returns the created Shop with its generated ID.
   Future<Shop> createShop({
     required String name,
     required String ownerId,
     String? email,
   }) async {
-    final now = DateTime.now();
-    final shopRef = _firestore.collection(FirestorePaths.shops).doc();
+    final callable = _functions.httpsCallable('createShopAndOwner');
+    final response = await callable.call({
+      'name': name,
+    });
 
-    final shop = Shop(
-      id: shopRef.id,
+    final resData = Map<String, dynamic>.from(response.data as Map);
+    final shopId = resData['shopId'] as String;
+    final now = DateTime.now();
+
+    return Shop(
+      id: shopId,
       name: name,
       ownerId: ownerId,
       email: email,
       createdAt: now,
       updatedAt: now,
     );
-
-    final model = ShopModel.fromEntity(shop);
-    final settingsModel = ShopSettingsModel(
-      updatedAt: now,
-      updatedBy: ownerId,
-    );
-
-    // Batch write: shop document + settings sub-document
-    final batch = _firestore.batch();
-    batch.set(shopRef, model.toFirestore());
-    batch.set(
-      _firestore.doc(FirestorePaths.shopSettings(shopRef.id)),
-      settingsModel.toFirestore(),
-    );
-    await batch.commit();
-
-    return shop;
   }
 
   /// Get a shop by ID

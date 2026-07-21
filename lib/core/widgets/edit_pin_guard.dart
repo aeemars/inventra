@@ -195,17 +195,11 @@ class _EditPinGuardState extends ConsumerState<EditPinGuard> {
 
   @override
   Widget build(BuildContext context) {
-    final user = ref.watch(currentUserProvider);
     final isUnlocked = ref.watch(editPinUnlockedProvider);
+    if (isUnlocked) return widget.child;
 
-    if (user == null) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
-    }
-
-    // Determine what to display
-    final hasPin = user.editPin != null && user.editPin!.isNotEmpty;
+    final user = ref.watch(currentUserProvider);
+    final hasPin = user?.editPin != null && user!.editPin!.isNotEmpty;
 
     if (_showRecoveryCodeScreen) {
       return _buildRecoveryDisplay();
@@ -215,15 +209,11 @@ class _EditPinGuardState extends ConsumerState<EditPinGuard> {
       return _buildRecoveryInputView();
     }
 
-    if (!hasPin || _isSettingUp) {
+    if (_isSettingUp || !hasPin) {
       return _buildSetupView();
     }
 
-    if (!isUnlocked) {
-      return _buildUnlockView();
-    }
-
-    return widget.child;
+    return _buildUnlockView();
   }
 
   // Helper NumPad Widget
