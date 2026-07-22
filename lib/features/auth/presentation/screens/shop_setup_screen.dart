@@ -42,6 +42,12 @@ class _ShopSetupScreenState extends ConsumerState<ShopSetupScreen> {
       await ref
           .read(authRepositoryProvider)
           .createAndLinkShop(shopName: name);
+
+      ref.invalidate(authStateProvider);
+      try {
+        await ref.read(authStateProvider.future).timeout(const Duration(seconds: 3));
+      } catch (_) {}
+
       if (mounted) context.go('/dashboard');
     } catch (e) {
       setState(() => _isLoading = false);

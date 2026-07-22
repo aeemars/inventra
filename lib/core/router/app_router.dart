@@ -26,18 +26,27 @@ import '../extensions/theme_ext.dart';
 import 'scanner_route_access.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
+  final user = ref.watch(currentUserProvider);
+
   return GoRouter(
     initialLocation: '/',
     redirect: (context, state) {
       final loc = state.matchedLocation;
-      // Don't redirect on splash, login, forgot-password, or shop-setup
-      const publicRoutes = ['/', '/login', '/forgot-password', '/shop-setup'];
+
+      if (loc == '/shop-setup') {
+        if (user != null && user.hasShop) {
+          return '/dashboard';
+        }
+        return null;
+      }
+
+      const publicRoutes = ['/', '/login', '/forgot-password'];
       if (publicRoutes.contains(loc)) return null;
 
-      final user = ref.read(currentUserProvider);
       if (user != null && !user.hasShop) {
         return '/shop-setup';
       }
+
       return null;
     },
     routes: [
