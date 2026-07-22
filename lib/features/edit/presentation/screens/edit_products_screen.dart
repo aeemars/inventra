@@ -67,23 +67,15 @@ class _EditProductsScreenState extends ConsumerState<EditProductsScreen> {
       if (!mounted) return;
 
       if (!status.isGranted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              status.isPermanentlyDenied
-                  ? 'Camera permission is blocked. Enable it from app settings.'
-                  : 'Camera permission is required to scan barcodes.',
-            ),
-            backgroundColor: AppColors.warning,
-            action: status.isPermanentlyDenied
-                ? SnackBarAction(
-                    label: 'Settings',
-                    textColor: Colors.white,
-                    onPressed: openAppSettings,
-                  )
-                : null,
-          ),
+        context.showAppSnackBar(
+          message: status.isPermanentlyDenied
+              ? 'Camera permission is blocked. Enable it from app settings.'
+              : 'Camera permission is required to scan barcodes.',
+          type: AppSnackBarType.warning,
         );
+        if (status.isPermanentlyDenied) {
+          await openAppSettings();
+        }
         return;
       }
 
@@ -459,11 +451,9 @@ class _QuickEditDialogState extends ConsumerState<_QuickEditDialog> {
   Future<void> _save() async {
     final newPrice = double.tryParse(_priceController.text.trim());
     if (newPrice == null || newPrice < 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Enter a valid price.'),
-          backgroundColor: AppColors.error,
-        ),
+      context.showAppSnackBar(
+        message: 'Enter a valid price.',
+        type: AppSnackBarType.error,
       );
       return;
     }
@@ -471,11 +461,9 @@ class _QuickEditDialogState extends ConsumerState<_QuickEditDialog> {
     final parsedExpiry = _parseDate(_expiryController.text);
     if (_expiryController.text.trim().isNotEmpty &&
         parsedExpiry == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Use date format mm/dd/yyyy.'),
-          backgroundColor: AppColors.error,
-        ),
+      context.showAppSnackBar(
+        message: 'Use date format mm/dd/yyyy.',
+        type: AppSnackBarType.error,
       );
       return;
     }
@@ -499,18 +487,14 @@ class _QuickEditDialogState extends ConsumerState<_QuickEditDialog> {
 
       if (success) {
         Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Product updated.'),
-            backgroundColor: AppColors.success,
-          ),
+        context.showAppSnackBar(
+          message: 'Product updated.',
+          type: AppSnackBarType.success,
         );
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Failed to update product.'),
-            backgroundColor: AppColors.error,
-          ),
+        context.showAppSnackBar(
+          message: 'Failed to update product.',
+          type: AppSnackBarType.error,
         );
       }
     } finally {

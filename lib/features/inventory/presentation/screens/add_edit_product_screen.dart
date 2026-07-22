@@ -259,11 +259,9 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
         setState(() => _masterDataExpanded = true);
       }
       if (_nameController.text.trim().isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Product name is required — expand "Master Data" to fill it in'),
-            backgroundColor: Colors.orange.shade700,
-          ),
+        context.showAppSnackBar(
+          message: 'Product name is required — expand "Master Data" to fill it in',
+          type: AppSnackBarType.warning,
         );
       }
       return;
@@ -272,22 +270,18 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
     // ── Pre-flight guards ──
     final shopId = ref.read(currentShopIdProvider);
     if (shopId == null || shopId.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Your account has no shop linked. Please re-login or contact support.'),
-          backgroundColor: AppColors.error,
-        ),
+      context.showAppSnackBar(
+        message: 'Your account has no shop linked. Please re-login or contact support.',
+        type: AppSnackBarType.error,
       );
       return;
     }
 
     final userId = ref.read(currentUserProvider)?.uid ?? '';
     if (userId.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Session expired. Please sign in again.'),
-          backgroundColor: AppColors.error,
-        ),
+      context.showAppSnackBar(
+        message: 'Session expired. Please sign in again.',
+        type: AppSnackBarType.error,
       );
       return;
     }
@@ -376,17 +370,13 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
     }
 
     if (success && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            isEditing
-                ? 'Product updated!'
-                : _isScannedExistingProduct
-                    ? 'Stock updated!'
-                    : 'Product added!',
-          ),
-          backgroundColor: AppColors.success,
-        ),
+      context.showAppSnackBar(
+        message: isEditing
+            ? 'Product updated!'
+            : _isScannedExistingProduct
+                ? 'Stock updated!'
+                : 'Product added!',
+        type: AppSnackBarType.success,
       );
 
       // Offer to print label for auto-generated products
@@ -473,11 +463,9 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
 
     ref.listen<InventoryState>(inventoryControllerProvider, (_, state) {
       if (state.error != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(state.error!),
-            backgroundColor: AppColors.error,
-          ),
+        context.showAppSnackBar(
+          message: state.error!,
+          type: AppSnackBarType.error,
         );
       }
     });

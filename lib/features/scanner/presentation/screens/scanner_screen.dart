@@ -801,23 +801,16 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen>
   }
 
   void _showIntentRequiredSnackBar() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Select scan purpose first: Add Product or New Sale.'),
-        backgroundColor: AppColors.warning,
-      ),
+    context.showAppSnackBar(
+      message: 'Select scan purpose first: Add Product or New Sale.',
+      type: AppSnackBarType.warning,
     );
   }
 
   void _showResultSnackBar(String message, bool success) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: success ? AppColors.success : AppColors.error,
-        behavior: SnackBarBehavior.floating,
-        margin: const EdgeInsets.all(16),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
+    context.showAppSnackBar(
+      message: message,
+      type: success ? AppSnackBarType.success : AppSnackBarType.error,
     );
   }
 

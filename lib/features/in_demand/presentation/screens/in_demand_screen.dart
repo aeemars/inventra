@@ -65,17 +65,13 @@ class _InDemandScreenState extends ConsumerState<InDemandScreen> {
       _noteController.clear();
     } on Failure catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.message), backgroundColor: AppColors.error),
-        );
+        context.showAppSnackBar(message: e.message, type: AppSnackBarType.error);
       }
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(InDemandFailure.addFailed().message),
-            backgroundColor: AppColors.error,
-          ),
+        context.showAppSnackBar(
+          message: InDemandFailure.addFailed().message,
+          type: AppSnackBarType.error,
         );
       }
     } finally {
@@ -92,17 +88,13 @@ class _InDemandScreenState extends ConsumerState<InDemandScreen> {
       await docRef.update({'requestCount': FieldValue.increment(1)});
     } on Failure catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.message), backgroundColor: AppColors.error),
-        );
+        context.showAppSnackBar(message: e.message, type: AppSnackBarType.error);
       }
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(InDemandFailure.incrementFailed().message),
-            backgroundColor: AppColors.error,
-          ),
+        context.showAppSnackBar(
+          message: InDemandFailure.incrementFailed().message,
+          type: AppSnackBarType.error,
         );
       }
     }
@@ -110,12 +102,7 @@ class _InDemandScreenState extends ConsumerState<InDemandScreen> {
 
   void _showSnack(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: AppColors.error,
-      ),
-    );
+    context.showAppSnackBar(message: message, type: AppSnackBarType.error);
   }
 
   @override

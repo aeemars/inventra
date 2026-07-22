@@ -189,11 +189,9 @@ class _SaleScreenState extends ConsumerState<SaleScreen> {
       );
     } else {
       final state = ref.read(scannerControllerProvider);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(state.message ?? 'Sale failed. Please try again.'),
-          backgroundColor: AppColors.error,
-        ),
+      context.showAppSnackBar(
+        message: state.message ?? 'Sale failed. Please try again.',
+        type: AppSnackBarType.error,
       );
     }
   }
