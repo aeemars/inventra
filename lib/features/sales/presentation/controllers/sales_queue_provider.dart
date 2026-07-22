@@ -22,6 +22,18 @@ class SalesQueueNotifier extends StateNotifier<List<SalesQueueItem>> {
     }
   }
 
+  /// Adds a product to the queue ONLY if it is not already in the queue.
+  /// Returns `true` if newly added, `false` if product was already in the queue.
+  bool addUnique(Product product, {int quantity = 1}) {
+    final index = state.indexWhere((i) => i.product.id == product.id);
+    if (index != -1) {
+      return false; // Already present in queue
+    }
+    final qty = quantity.clamp(1, product.quantity == 0 ? 1 : product.quantity);
+    state = [...state, SalesQueueItem(product: product, quantity: qty)];
+    return true;
+  }
+
   void updateQuantity(String productId, int quantity) {
     state = state.map((item) {
       if (item.product.id != productId) return item;
