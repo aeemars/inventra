@@ -45,17 +45,16 @@ Future<void> bootstrap() async {
     try {
       await FirebaseAppCheck.instance
           .activate(
-            providerAndroid: kDebugMode
+            providerAndroid: (kDebugMode || debugAppCheckToken.isNotEmpty)
                 ? (debugAppCheckToken.isEmpty
                     ? const AndroidDebugProvider()
                     : AndroidDebugProvider(debugToken: debugAppCheckToken))
-                : const AndroidPlayIntegrityProvider(),
+                : const AndroidDebugProvider(),
           )
           .timeout(
             const Duration(seconds: 6),
             onTimeout: () => debugPrint(
-              '⚠️ App Check timed out — APK may be sideloaded or Play Integrity '
-              'is unavailable. Continuing without attestation.',
+              '⚠️ App Check timed out — Continuing without attestation.',
             ),
           );
     } catch (e) {
