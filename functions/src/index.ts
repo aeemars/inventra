@@ -3,14 +3,9 @@ import {onCall, HttpsError, CallableRequest} from "firebase-functions/v2/https";
 import {onDocumentWritten, FirestoreEvent, Change, DocumentSnapshot} from "firebase-functions/v2/firestore";
 import {onSchedule, ScheduledEvent} from "firebase-functions/v2/scheduler";
 import * as crypto from "crypto";
-import * as nodemailer from "nodemailer";
-import {defineSecret} from "firebase-functions/params";
 
 admin.initializeApp();
 const db = admin.firestore();
-
-const smtpUser = defineSecret("SMTP_USER");
-const smtpPass = defineSecret("SMTP_PASS");
 
 function hashPin(pin: string, salt: string): string {
   return crypto.createHash("sha256").update(`${pin}:${salt}`).digest("hex");
@@ -21,11 +16,19 @@ function generateResetCode(): string {
 }
 
 async function sendPinResetEmail(toEmail: string, code: string): Promise<void> {
+  const user = process.env.SMTP_USER || "";
+  const pass = process.env.SMTP_PASS || "";
+  if (!user || !pass) {
+    console.warn("SMTP credentials not configured in environment (SMTP_USER/SMTP_PASS). Reset email skipped.");
+    return;
+  }
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const nodemailer = require("nodemailer");
   const transporter = nodemailer.createTransport({
     host: "smtp.gmail.com",
     port: 587,
     secure: false,
-    auth: {user: smtpUser.value(), pass: smtpPass.value()},
+    auth: {user, pass},
   });
 
   await transporter.sendMail({
@@ -52,7 +55,7 @@ async function sendPinResetEmail(toEmail: string, code: string): Promise<void> {
  * authenticated with the current PIN.
  */
 export const setEditPin = onCall(
-  {enforceAppCheck: false, secrets: [smtpUser, smtpPass]},
+  {enforceAppCheck: false},
   async (request: CallableRequest<any>) => {
     if (!request.auth) throw new HttpsError("unauthenticated", "Must be authenticated");
     const uid = request.auth.uid;
@@ -113,7 +116,7 @@ export const verifyEditPin = onCall({enforceAppCheck: false}, async (request: Ca
  * verified account email. Replaces the old recovery-code system.
  */
 export const requestEditPinReset = onCall(
-  {enforceAppCheck: false, secrets: [smtpUser, smtpPass]},
+  {enforceAppCheck: false},
   async (request: CallableRequest<any>) => {
     if (!request.auth) throw new HttpsError("unauthenticated", "Must be authenticated");
     const uid = request.auth.uid;
