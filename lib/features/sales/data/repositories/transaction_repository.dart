@@ -5,6 +5,7 @@ import '../models/transaction_model.dart';
 import '../../../../shared/models/stock_movement_model.dart';
 
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 /// Repository for sales transactions and stock movement queries
 class TransactionRepository {
@@ -25,6 +26,7 @@ class TransactionRepository {
     double discount = 0.0,
     String? note,
   }) async {
+    await FirebaseAuth.instance.currentUser?.getIdToken(true);
     final callable = _functions.httpsCallable('validateStockDeduction');
     final response = await callable.call({
       'shopId': shopId,

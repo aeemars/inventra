@@ -948,3 +948,38 @@ export const aggregateDailySales = onSchedule(
     }
   }
 );
+
+/**
+ * Automatically record initial stock movement when a new product is created.
+ */
+export const onProductCreated = onDocumentWritten(
+  "shops/{shopId}/products/{productId}",
+  async (event: FirestoreEvent<Change<DocumentSnapshot> | undefined, {shopId: string; productId: string}>) => {
+    if (!event.data) return;
+    const before = event.data.before;
+    const after = event.data.after;
+
+    // Only process on initial document creation
+    if (before.exists || !after.exists) return;
+
+    const data = after.data()!;
+    const qty = Number(data.quantity) || 0;
+    if (qty > 0) {
+      const {shopId, productId} = event.params;
+      const movementRef = db.collection(`shops/${shopId}/stock_movements`).doc();
+      await movementRef.set({
+        productId,
+        productName: data.name || "New Product",
+        type: "intake",
+        quantityChange: qty,
+        quantityBefore: 0,
+        quantityAfter: qty,
+        reason: "Initial stock",
+        userId: data.createdBy || "",
+        userName: data.createdByName || "",
+        source: "manual",
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    }
+  }
+);

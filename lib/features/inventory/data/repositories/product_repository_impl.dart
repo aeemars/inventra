@@ -8,6 +8,7 @@ import '../../domain/repositories/product_repository.dart';
 import '../models/product_model.dart';
 
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class ProductRepositoryImpl implements ProductRepository {
   final FirebaseFirestore _firestore;
@@ -123,32 +124,9 @@ class ProductRepositoryImpl implements ProductRepository {
   @override
   Future<Product> addProduct(String shopId, Product product) async {
     try {
-      final batch = _firestore.batch();
-
       final docRef = _firestore.collection(FirestorePaths.products(shopId)).doc();
       final newProduct = product.copyWith(id: docRef.id);
-      batch.set(docRef, ProductModel.fromEntity(newProduct).toFirestore());
-
-      if (product.quantity > 0) {
-        final movementRef = _firestore
-            .collection(FirestorePaths.stockMovements(shopId))
-            .doc();
-        batch.set(movementRef, {
-          'productId': docRef.id,
-          'productName': product.name,
-          'type': 'intake',
-          'quantityChange': product.quantity,
-          'quantityBefore': 0,
-          'quantityAfter': product.quantity,
-          'reason': 'Initial stock',
-          'userId': product.createdBy,
-          'userName': '',
-          'source': 'manual',
-          'createdAt': FieldValue.serverTimestamp(),
-        });
-      }
-
-      await batch.commit();
+      await docRef.set(ProductModel.fromEntity(newProduct).toFirestore());
       return newProduct;
     } on FirebaseException catch (e) {
       throw FirestoreFailure.fromCode(e.code, rawMessage: e.message);
@@ -229,6 +207,7 @@ class ProductRepositoryImpl implements ProductRepository {
     required String userId,
   }) async {
     try {
+      await FirebaseAuth.instance.currentUser?.getIdToken(true);
       final callable = _functions.httpsCallable('processRestock');
       await callable.call({
         'shopId': shopId,

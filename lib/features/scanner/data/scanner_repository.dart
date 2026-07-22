@@ -1,4 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../../core/constants/firestore_paths.dart';
 import '../../../core/errors/failures.dart';
 import '../../../core/errors/firestore_error_handler.dart';
@@ -21,9 +23,13 @@ class InsufficientStockException implements Exception {
 
 class ScannerRepository {
   final FirebaseFirestore _firestore;
+  final FirebaseFunctions _functions;
 
-  ScannerRepository({FirebaseFirestore? firestore})
-      : _firestore = firestore ?? FirebaseFirestore.instance;
+  ScannerRepository({
+    FirebaseFirestore? firestore,
+    FirebaseFunctions? functions,
+  })  : _firestore = firestore ?? FirebaseFirestore.instance,
+        _functions = functions ?? FirebaseFunctions.instance;
 
   // ── Scan History ──
 
@@ -44,10 +50,9 @@ class ScannerRepository {
             .toList());
   }
 
-  // ── Sale (atomic stock deduction + records) ──
+  // ── Sale (atomic stock deduction + records via Cloud Function) ──
 
-  /// Performs an atomic sale: validates stock, deducts quantity,
-  /// creates stock_movement and transaction records.
+  /// Performs an atomic sale via Cloud Function.
   /// Returns the sale transaction ID.
   Future<String> performSale({
     required String shopId,
@@ -60,88 +65,21 @@ class ScannerRepository {
     required String userName,
   }) async {
     try {
-      final productRef = _firestore
-          .collection(FirestorePaths.products(shopId))
-          .doc(productId);
-
-      // Pre-create doc refs so we can write inside the transaction
-      final movementRef = _firestore
-          .collection(FirestorePaths.stockMovements(shopId))
-          .doc();
-      final transactionRef = _firestore
-          .collection(FirestorePaths.transactions(shopId))
-          .doc();
-
-      await _firestore.runTransaction((txn) async {
-        final snapshot = await txn.get(productRef);
-        if (!snapshot.exists) {
-          throw ScannerFailure.productNotFound();
-        }
-
-        final currentQty = (snapshot.data()!['quantity'] as num).toInt();
-
-        if (currentQty < quantity) {
-          throw InsufficientStockException(
-            available: currentQty,
-            requested: quantity,
-          );
-        }
-
-        final newQty = currentQty - quantity;
-        final totalPrice = unitPrice * quantity;
-        final now = FieldValue.serverTimestamp();
-
-        // 1. Deduct stock
-        txn.update(productRef, {
-          'quantity': newQty,
-          'updatedAt': now,
-        });
-
-        // 2. Create stock movement
-        txn.set(movementRef, {
-          'productId': productId,
-          'productName': productName,
-          'type': 'sale',
-          'quantityChange': -quantity,
-          'quantityBefore': currentQty,
-          'quantityAfter': newQty,
-          'reference': transactionRef.id,
-          'userId': userId,
-          'userName': userName,
-          'source': 'scan',
-          'createdAt': now,
-        });
-
-        // 3. Create sale transaction
-        txn.set(transactionRef, {
-          'type': 'sale',
-          'items': [
-            {
-              'productId': productId,
-              'productName': productName,
-              'sku': productSku,
-              'quantity': quantity,
-              'unitPrice': unitPrice,
-              'totalPrice': totalPrice,
-            }
-          ],
-          'subtotal': totalPrice,
-          'discount': 0,
-          'taxAmount': 0,
-          'total': totalPrice,
-          'paymentMethod': 'pending',
-          'status': 'completed',
-          'createdBy': userId,
-          'createdByName': userName,
-          'createdAt': now,
-        });
+      await FirebaseAuth.instance.currentUser?.getIdToken(true);
+      final callable = _functions.httpsCallable('validateStockDeduction');
+      final res = await callable.call({
+        'shopId': shopId,
+        'items': [
+          {
+            'productId': productId,
+            'quantity': quantity,
+          }
+        ],
+        'paymentMethod': 'cash',
+        'discount': 0,
       });
-
-      return transactionRef.id;
-    } on ScannerFailure {
-      rethrow;
-    } on InsufficientStockException catch (e) {
-      throw ScannerFailure.insufficientStock(e.available, e.requested);
+      final resData = Map<String, dynamic>.from(res.data as Map);
+      return resData['transactionId'] as String;
     } on FirebaseException catch (e) {
       throw FirestoreFailure.fromCode(e.code, rawMessage: e.message);
     } catch (e) {
@@ -149,9 +87,8 @@ class ScannerRepository {
     }
   }
 
-  // ── Restock (atomic stock increment + record) ──
+  // ── Restock (atomic stock increment + record via Cloud Function) ──
 
-  /// Atomically increments stock and creates a stock movement record.
   Future<void> performRestock({
     required String shopId,
     required String productId,
@@ -163,47 +100,15 @@ class ScannerRepository {
     String? supplier,
   }) async {
     try {
-      final productRef = _firestore
-          .collection(FirestorePaths.products(shopId))
-          .doc(productId);
-      final movementRef = _firestore
-          .collection(FirestorePaths.stockMovements(shopId))
-          .doc();
-
-      await _firestore.runTransaction((txn) async {
-        final snapshot = await txn.get(productRef);
-        if (!snapshot.exists) {
-          throw ScannerFailure.productNotFound();
-        }
-
-        final currentQty = (snapshot.data()!['quantity'] as num).toInt();
-        final newQty = currentQty + quantity;
-        final now = FieldValue.serverTimestamp();
-
-        // 1. Increment stock
-        txn.update(productRef, {
-          'quantity': newQty,
-          'updatedAt': now,
-        });
-
-        // 2. Create stock movement
-        txn.set(movementRef, {
-          'productId': productId,
-          'productName': productName,
-          'type': 'restock',
-          'quantityChange': quantity,
-          'quantityBefore': currentQty,
-          'quantityAfter': newQty,
-          'reason': note,
-          'reference': supplier,
-          'userId': userId,
-          'userName': userName,
-          'source': 'scan',
-          'createdAt': now,
-        });
+      await FirebaseAuth.instance.currentUser?.getIdToken(true);
+      final callable = _functions.httpsCallable('processRestock');
+      await callable.call({
+        'shopId': shopId,
+        'productId': productId,
+        'quantity': quantity,
+        'note': note,
+        'supplier': supplier,
       });
-    } on ScannerFailure {
-      rethrow;
     } on FirebaseException catch (e) {
       throw FirestoreFailure.fromCode(e.code, rawMessage: e.message);
     } catch (e) {
@@ -211,7 +116,7 @@ class ScannerRepository {
     }
   }
 
-  // ── Stock Adjustment (atomic) ──
+  // ── Stock Adjustment (atomic via Cloud Function) ──
 
   Future<void> performAdjustment({
     required String shopId,
@@ -223,54 +128,19 @@ class ScannerRepository {
     String? reason,
   }) async {
     try {
-      final productRef = _firestore
-          .collection(FirestorePaths.products(shopId))
-          .doc(productId);
-      final movementRef = _firestore
-          .collection(FirestorePaths.stockMovements(shopId))
-          .doc();
+      await FirebaseAuth.instance.currentUser?.getIdToken(true);
+      final docRef = _firestore.collection(FirestorePaths.products(shopId)).doc(productId);
+      final snap = await docRef.get();
+      final currentQty = (snap.data()?['quantity'] as num?)?.toInt() ?? 0;
+      final newQty = currentQty + quantityChange;
 
-      await _firestore.runTransaction((txn) async {
-        final snapshot = await txn.get(productRef);
-        if (!snapshot.exists) {
-          throw ScannerFailure.productNotFound();
-        }
-
-        final currentQty = (snapshot.data()!['quantity'] as num).toInt();
-        final newQty = currentQty + quantityChange;
-
-        if (newQty < 0) {
-          throw InsufficientStockException(
-            available: currentQty,
-            requested: quantityChange.abs(),
-          );
-        }
-
-        final now = FieldValue.serverTimestamp();
-
-        txn.update(productRef, {
-          'quantity': newQty,
-          'updatedAt': now,
-        });
-
-        txn.set(movementRef, {
-          'productId': productId,
-          'productName': productName,
-          'type': 'adjustment',
-          'quantityChange': quantityChange,
-          'quantityBefore': currentQty,
-          'quantityAfter': newQty,
-          'reason': reason,
-          'userId': userId,
-          'userName': userName,
-          'source': 'scan',
-          'createdAt': now,
-        });
+      final callable = _functions.httpsCallable('processStockAdjustment');
+      await callable.call({
+        'shopId': shopId,
+        'productId': productId,
+        'newQuantity': newQty < 0 ? 0 : newQty,
+        'reason': reason,
       });
-    } on ScannerFailure {
-      rethrow;
-    } on InsufficientStockException catch (e) {
-      throw ScannerFailure.insufficientStock(e.available, e.requested);
     } on FirebaseException catch (e) {
       throw FirestoreFailure.fromCode(e.code, rawMessage: e.message);
     } catch (e) {
@@ -278,119 +148,24 @@ class ScannerRepository {
     }
   }
 
-  /// Performs an atomic multi-item sale: validates stock for every item,
-  /// deducts each product's quantity, writes one stock_movement per product,
-  /// and creates a single transaction document with all items.
+  /// Performs an atomic multi-item sale via Cloud Function.
   Future<String> performMultiItemSale({
     required String shopId,
-    required List<Map<String, dynamic>> items, // {productId, productName, sku, quantity, unitPrice}
+    required List<Map<String, dynamic>> items,
     required String userId,
     required String userName,
   }) async {
     try {
-      final transactionRef =
-          _firestore.collection(FirestorePaths.transactions(shopId)).doc();
-
-      final productRefs = {
-        for (final item in items)
-          item['productId'] as String:
-              _firestore.collection(FirestorePaths.products(shopId)).doc(item['productId'] as String)
-      };
-
-      final movementRefs = {
-        for (final item in items)
-          item['productId'] as String:
-              _firestore.collection(FirestorePaths.stockMovements(shopId)).doc()
-      };
-
-      double subtotal = 0;
-      final txItems = <Map<String, dynamic>>[];
-
-      await _firestore.runTransaction((txn) async {
-        // ── Phase 1: read every product first (Firestore transaction rule) ──
-        final snapshots = <String, DocumentSnapshot<Map<String, dynamic>>>{};
-        for (final entry in productRefs.entries) {
-          snapshots[entry.key] = await txn.get(entry.value);
-        }
-
-        // ── Phase 2: validate stock for every item before writing anything ──
-        for (final item in items) {
-          final productId = item['productId'] as String;
-          final snapshot = snapshots[productId]!;
-          if (!snapshot.exists) {
-            throw ScannerFailure.productNotFound();
-          }
-          final currentQty = (snapshot.data()!['quantity'] as num).toInt();
-          final requestedQty = item['quantity'] as int;
-          if (currentQty < requestedQty) {
-            throw InsufficientStockException(
-              available: currentQty,
-              requested: requestedQty,
-            );
-          }
-        }
-
-        // ── Phase 3: apply all writes ──
-        final now = FieldValue.serverTimestamp();
-        for (final item in items) {
-          final productId = item['productId'] as String;
-          final snapshot = snapshots[productId]!;
-          final currentQty = (snapshot.data()!['quantity'] as num).toInt();
-          final requestedQty = item['quantity'] as int;
-          final unitPrice = (item['unitPrice'] as num).toDouble();
-          final newQty = currentQty - requestedQty;
-          final lineTotal = unitPrice * requestedQty;
-          subtotal += lineTotal;
-
-          txn.update(productRefs[productId]!, {
-            'quantity': newQty,
-            'updatedAt': now,
-          });
-
-          txn.set(movementRefs[productId]!, {
-            'productId': productId,
-            'productName': item['productName'],
-            'type': 'sale',
-            'quantityChange': -requestedQty,
-            'quantityBefore': currentQty,
-            'quantityAfter': newQty,
-            'reference': transactionRef.id,
-            'userId': userId,
-            'userName': userName,
-            'source': 'scan',
-            'createdAt': now,
-          });
-
-          txItems.add({
-            'productId': productId,
-            'productName': item['productName'],
-            'sku': item['sku'],
-            'quantity': requestedQty,
-            'unitPrice': unitPrice,
-            'totalPrice': lineTotal,
-          });
-        }
-
-        txn.set(transactionRef, {
-          'type': 'sale',
-          'items': txItems,
-          'subtotal': subtotal,
-          'discount': 0,
-          'taxAmount': 0,
-          'total': subtotal,
-          'paymentMethod': 'pending',
-          'status': 'completed',
-          'createdBy': userId,
-          'createdByName': userName,
-          'createdAt': now,
-        });
+      await FirebaseAuth.instance.currentUser?.getIdToken(true);
+      final callable = _functions.httpsCallable('validateStockDeduction');
+      final res = await callable.call({
+        'shopId': shopId,
+        'items': items,
+        'paymentMethod': 'cash',
+        'discount': 0,
       });
-
-      return transactionRef.id;
-    } on ScannerFailure {
-      rethrow;
-    } on InsufficientStockException catch (e) {
-      throw ScannerFailure.insufficientStock(e.available, e.requested);
+      final resData = Map<String, dynamic>.from(res.data as Map);
+      return resData['transactionId'] as String;
     } on FirebaseException catch (e) {
       throw FirestoreFailure.fromCode(e.code, rawMessage: e.message);
     } catch (e) {
