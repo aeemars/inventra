@@ -369,8 +369,6 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen>
           final added = ref.read(salesQueueProvider.notifier).addUnique(product);
           if (added) {
             _showResultSnackBar('${product.name} added to sale queue', true);
-          } else {
-            _showResultSnackBar('${product.name} is already in the queue', false);
           }
         }
         // Keep camera live — do not open a blocking sheet, so the next
