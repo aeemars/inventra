@@ -215,6 +215,7 @@ class AuthRepositoryImpl implements AuthRepository {
   @override
   Future<void> setEditPin({required String newPin, String? currentPin}) async {
     try {
+      await _auth.currentUser?.getIdToken(true);
       final callable = _functions.httpsCallable('setEditPin');
       await callable.call({'newPin': newPin, 'currentPin': currentPin});
     } catch (e) {
@@ -225,6 +226,7 @@ class AuthRepositoryImpl implements AuthRepository {
   @override
   Future<bool> verifyEditPin(String pin) async {
     try {
+      await _auth.currentUser?.getIdToken(true);
       final callable = _functions.httpsCallable('verifyEditPin');
       final result = await callable.call({'pin': pin});
       return (result.data as Map)['valid'] == true;
@@ -236,6 +238,7 @@ class AuthRepositoryImpl implements AuthRepository {
   @override
   Future<String> requestEditPinReset() async {
     try {
+      await _auth.currentUser?.getIdToken(true);
       final callable = _functions.httpsCallable('requestEditPinReset');
       final result = await callable.call({});
       return (result.data as Map)['maskedEmail'] as String;
@@ -247,6 +250,7 @@ class AuthRepositoryImpl implements AuthRepository {
   @override
   Future<void> confirmEditPinReset({required String code, required String newPin}) async {
     try {
+      await _auth.currentUser?.getIdToken(true);
       final callable = _functions.httpsCallable('confirmEditPinReset');
       await callable.call({'code': code, 'newPin': newPin});
     } catch (e) {
@@ -337,17 +341,18 @@ class AuthRepositoryImpl implements AuthRepository {
 
   @override
   Future<AppUser> createAndLinkShop({required String shopName}) async {
-    final uid = _auth.currentUser?.uid;
-    if (uid == null) {
+    final firebaseUser = _auth.currentUser;
+    if (firebaseUser == null) {
       throw const AuthFailure(message: 'Not authenticated');
     }
     try {
+      await firebaseUser.getIdToken(true);
       final callable = _functions.httpsCallable('createShopAndOwner');
       await callable.call({
         'name': shopName.trim(),
       });
 
-      final user = await _fetchUserProfile(uid);
+      final user = await _fetchUserProfile(firebaseUser.uid);
       _cachedUser = user;
       return user;
     } catch (e) {

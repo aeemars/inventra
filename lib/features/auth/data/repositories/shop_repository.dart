@@ -5,6 +5,7 @@ import '../models/shop_model.dart';
 import '../../../../shared/models/shop_settings_model.dart';
 
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 /// Repository for shop-level operations
 class ShopRepository {
@@ -24,6 +25,7 @@ class ShopRepository {
     required String ownerId,
     String? email,
   }) async {
+    await FirebaseAuth.instance.currentUser?.getIdToken(true);
     final callable = _functions.httpsCallable('createShopAndOwner');
     final response = await callable.call({
       'name': name,
