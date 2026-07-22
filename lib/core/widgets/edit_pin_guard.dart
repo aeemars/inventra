@@ -158,7 +158,6 @@ class _EditPinGuardState extends ConsumerState<EditPinGuard> {
     try {
       await ref.read(authRepositoryProvider).setEditPin(newPin: _firstPin);
       if (mounted) {
-        ref.invalidate(authStateProvider);
         ref.read(editPinUnlockedProvider.notifier).state = true;
         setState(() {
           _isSettingUp = false;
@@ -225,7 +224,6 @@ class _EditPinGuardState extends ConsumerState<EditPinGuard> {
     try {
       await ref.read(authRepositoryProvider).confirmEditPinReset(code: code, newPin: newPin);
       if (mounted) {
-        ref.invalidate(authStateProvider);
         ref.read(editPinUnlockedProvider.notifier).state = true;
         setState(() {
           _isResetting = false;
