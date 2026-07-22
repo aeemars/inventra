@@ -55,7 +55,7 @@ async function sendPinResetEmail(toEmail: string, code: string): Promise<void> {
  * authenticated with the current PIN.
  */
 export const setEditPin = onCall(
-  {enforceAppCheck: false},
+  {enforceAppCheck: false, invoker: "public"},
   async (request: CallableRequest<any>) => {
     if (!request.auth) throw new HttpsError("unauthenticated", "Must be authenticated");
     const uid = request.auth.uid;
@@ -96,7 +96,7 @@ export const setEditPin = onCall(
  * Verify an entered PIN against the stored hash. Called every time the
  * Edit tab is unlocked — the client never reads the hash directly.
  */
-export const verifyEditPin = onCall({enforceAppCheck: false}, async (request: CallableRequest<any>) => {
+export const verifyEditPin = onCall({enforceAppCheck: false, invoker: "public"}, async (request: CallableRequest<any>) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "Must be authenticated");
   const uid = request.auth.uid;
   const {pin} = request.data || {};
@@ -116,7 +116,7 @@ export const verifyEditPin = onCall({enforceAppCheck: false}, async (request: Ca
  * verified account email. Replaces the old recovery-code system.
  */
 export const requestEditPinReset = onCall(
-  {enforceAppCheck: false},
+  {enforceAppCheck: false, invoker: "public"},
   async (request: CallableRequest<any>) => {
     if (!request.auth) throw new HttpsError("unauthenticated", "Must be authenticated");
     const uid = request.auth.uid;
@@ -149,7 +149,7 @@ export const requestEditPinReset = onCall(
 /**
  * Step 2 of forgot-PIN: verifies the emailed code and sets the new PIN.
  */
-export const confirmEditPinReset = onCall({enforceAppCheck: false}, async (request: CallableRequest<any>) => {
+export const confirmEditPinReset = onCall({enforceAppCheck: false, invoker: "public"}, async (request: CallableRequest<any>) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "Must be authenticated");
   const uid = request.auth.uid;
   const {code, newPin} = request.data || {};
@@ -295,7 +295,7 @@ async function claimNotificationSlot(
 /**
  * Callable function to create a new shop and bootstrap owner membership.
  */
-export const createShopAndOwner = onCall({enforceAppCheck: false}, async (request: CallableRequest<any>) => {
+export const createShopAndOwner = onCall({enforceAppCheck: false, invoker: "public"}, async (request: CallableRequest<any>) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "Must be authenticated");
   const uid = request.auth.uid;
   const {name, currency, address, phone} = request.data || {};
@@ -344,7 +344,7 @@ export const createShopAndOwner = onCall({enforceAppCheck: false}, async (reques
 /**
  * Callable function to manage shop members (owner only).
  */
-export const manageShopMember = onCall({enforceAppCheck: false}, async (request: CallableRequest<any>) => {
+export const manageShopMember = onCall({enforceAppCheck: false, invoker: "public"}, async (request: CallableRequest<any>) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "Must be authenticated");
   const uid = request.auth.uid;
   const {shopId, targetUid, role, isActive} = request.data || {};
@@ -390,7 +390,7 @@ export const manageShopMember = onCall({enforceAppCheck: false}, async (request:
 /**
  * Validate and execute stock deduction atomically (Sales POS).
  */
-export const validateStockDeduction = onCall({enforceAppCheck: false}, async (request: CallableRequest<any>) => {
+export const validateStockDeduction = onCall({enforceAppCheck: false, invoker: "public"}, async (request: CallableRequest<any>) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "Must be authenticated");
   }
@@ -536,7 +536,7 @@ export const validateStockDeduction = onCall({enforceAppCheck: false}, async (re
 /**
  * Callable function for restock operations (Owner/Manager only).
  */
-export const processRestock = onCall({enforceAppCheck: false}, async (request: CallableRequest<any>) => {
+export const processRestock = onCall({enforceAppCheck: false, invoker: "public"}, async (request: CallableRequest<any>) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "Must be authenticated");
   const uid = request.auth.uid;
   const {shopId, productId, quantity, costPrice, supplier, note} = request.data || {};
@@ -596,7 +596,7 @@ export const processRestock = onCall({enforceAppCheck: false}, async (request: C
 /**
  * Callable function for stock adjustments (Owner/Manager only).
  */
-export const processStockAdjustment = onCall({enforceAppCheck: false}, async (request: CallableRequest<any>) => {
+export const processStockAdjustment = onCall({enforceAppCheck: false, invoker: "public"}, async (request: CallableRequest<any>) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "Must be authenticated");
   const uid = request.auth.uid;
   const {shopId, productId, newQuantity, reason} = request.data || {};
@@ -650,7 +650,7 @@ export const processStockAdjustment = onCall({enforceAppCheck: false}, async (re
 /**
  * Callable function to update shop settings (Owner only).
  */
-export const updateShopSettings = onCall({enforceAppCheck: false}, async (request: CallableRequest<any>) => {
+export const updateShopSettings = onCall({enforceAppCheck: false, invoker: "public"}, async (request: CallableRequest<any>) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "Must be authenticated");
   const uid = request.auth.uid;
   const {shopId, settings} = request.data || {};
