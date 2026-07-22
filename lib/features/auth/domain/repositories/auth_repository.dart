@@ -30,9 +30,19 @@ abstract class AuthRepository {
     String? phoneNumber,
     String? shopName,
     String? fcmToken,
-    String? editPin,
-    String? editPinRecoveryCode,
   });
+
+  /// Set the Edit PIN (first time or change with current PIN)
+  Future<void> setEditPin({required String newPin, String? currentPin});
+
+  /// Verify an entered PIN against server hash
+  Future<bool> verifyEditPin(String pin);
+
+  /// Request a 6-digit PIN reset code emailed to the user's account email
+  Future<String> requestEditPinReset();
+
+  /// Confirm emailed reset code and set a new PIN
+  Future<void> confirmEditPinReset({required String code, required String newPin});
 
   /// Upload a profile photo and return the download URL.
   /// [filePath] is the absolute local path of the image file.

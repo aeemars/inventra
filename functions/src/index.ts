@@ -2,9 +2,187 @@ import * as admin from "firebase-admin";
 import {onCall, HttpsError, CallableRequest} from "firebase-functions/v2/https";
 import {onDocumentWritten, FirestoreEvent, Change, DocumentSnapshot} from "firebase-functions/v2/firestore";
 import {onSchedule, ScheduledEvent} from "firebase-functions/v2/scheduler";
+import * as crypto from "crypto";
+import * as nodemailer from "nodemailer";
+import {defineSecret} from "firebase-functions/params";
 
 admin.initializeApp();
 const db = admin.firestore();
+
+const smtpUser = defineSecret("SMTP_USER");
+const smtpPass = defineSecret("SMTP_PASS");
+
+function hashPin(pin: string, salt: string): string {
+  return crypto.createHash("sha256").update(`${pin}:${salt}`).digest("hex");
+}
+
+function generateResetCode(): string {
+  return crypto.randomInt(100000, 999999).toString(); // 6-digit code
+}
+
+async function sendPinResetEmail(toEmail: string, code: string): Promise<void> {
+  const transporter = nodemailer.createTransport({
+    host: "smtp.gmail.com",
+    port: 587,
+    secure: false,
+    auth: {user: smtpUser.value(), pass: smtpPass.value()},
+  });
+
+  await transporter.sendMail({
+    from: '"Inventra" <noreply@inventra.app>',
+    to: toEmail,
+    subject: "Your Inventra PIN reset code",
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto;">
+        <div style="background-color: #2E7D32; padding: 24px; border-radius: 10px 10px 0 0; text-align: center;">
+          <h1 style="color: #fff; font-size: 20px; margin: 0;">INVENTRA</h1>
+        </div>
+        <div style="background-color: #f9f9f9; padding: 28px; border: 1px solid #e5e5e5; border-top: none; border-radius: 0 0 10px 10px;">
+          <p style="font-size: 15px; color: #333;">Use this code to reset your Edit PIN:</p>
+          <p style="font-size: 32px; font-weight: bold; letter-spacing: 6px; color: #2E7D32; text-align: center; margin: 20px 0;">${code}</p>
+          <p style="font-size: 13px; color: #888;">This code expires in 15 minutes. If you didn't request this, you can safely ignore this email.</p>
+        </div>
+      </div>
+    `,
+  });
+}
+
+/**
+ * Set the Edit PIN for the first time, or change it while already
+ * authenticated with the current PIN.
+ */
+export const setEditPin = onCall(
+  {enforceAppCheck: false, secrets: [smtpUser, smtpPass]},
+  async (request: CallableRequest<any>) => {
+    if (!request.auth) throw new HttpsError("unauthenticated", "Must be authenticated");
+    const uid = request.auth.uid;
+    const {newPin, currentPin} = request.data || {};
+
+    if (!newPin || typeof newPin !== "string" || !/^\d{4}$/.test(newPin)) {
+      throw new HttpsError("invalid-argument", "PIN must be exactly 4 digits");
+    }
+
+    await checkRateLimit(uid, "setEditPin", 5);
+
+    const userRef = db.doc(`users/${uid}`);
+    const userSnap = await userRef.get();
+    const existingHash = userSnap.data()?.editPinHash as string | undefined;
+    const existingSalt = userSnap.data()?.editPinSalt as string | undefined;
+
+    // If a PIN already exists, the caller must prove they know it first.
+    if (existingHash) {
+      if (!currentPin || hashPin(currentPin, existingSalt || "") !== existingHash) {
+        throw new HttpsError("permission-denied", "Current PIN is incorrect");
+      }
+    }
+
+    const salt = crypto.randomBytes(16).toString("hex");
+    await userRef.set({
+      editPinHash: hashPin(newPin, salt),
+      editPinSalt: salt,
+      editPinResetCodeHash: admin.firestore.FieldValue.delete(),
+      editPinResetExpiresAt: admin.firestore.FieldValue.delete(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, {merge: true});
+
+    return {success: true};
+  }
+);
+
+/**
+ * Verify an entered PIN against the stored hash. Called every time the
+ * Edit tab is unlocked — the client never reads the hash directly.
+ */
+export const verifyEditPin = onCall({enforceAppCheck: false}, async (request: CallableRequest<any>) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Must be authenticated");
+  const uid = request.auth.uid;
+  const {pin} = request.data || {};
+
+  await checkRateLimit(uid, "verifyEditPin", 10);
+
+  const userSnap = await db.doc(`users/${uid}`).get();
+  const hash = userSnap.data()?.editPinHash as string | undefined;
+  const salt = userSnap.data()?.editPinSalt as string | undefined;
+
+  if (!hash) return {valid: false, hasPin: false};
+  return {valid: hashPin(pin, salt || "") === hash, hasPin: true};
+});
+
+/**
+ * Step 1 of forgot-PIN: emails a 6-digit reset code to the user's
+ * verified account email. Replaces the old recovery-code system.
+ */
+export const requestEditPinReset = onCall(
+  {enforceAppCheck: false, secrets: [smtpUser, smtpPass]},
+  async (request: CallableRequest<any>) => {
+    if (!request.auth) throw new HttpsError("unauthenticated", "Must be authenticated");
+    const uid = request.auth.uid;
+
+    await checkRateLimit(uid, "requestEditPinReset", 3);
+
+    const userSnap = await db.doc(`users/${uid}`).get();
+    const email = userSnap.data()?.email as string | undefined;
+    if (!email) throw new HttpsError("failed-precondition", "No email on file");
+
+    const code = generateResetCode();
+    const codeSalt = crypto.randomBytes(16).toString("hex");
+    const expiresAt = Date.now() + 15 * 60 * 1000; // 15 minutes
+
+    await db.doc(`users/${uid}`).set({
+      editPinResetCodeHash: hashPin(code, codeSalt),
+      editPinResetCodeSalt: codeSalt,
+      editPinResetExpiresAt: expiresAt,
+    }, {merge: true});
+
+    await sendPinResetEmail(email, code);
+
+    // Return a masked email so the UI can show "Code sent to j***@gmail.com"
+    const [local, domain] = email.split("@");
+    const masked = `${local.slice(0, 1)}***@${domain}`;
+    return {success: true, maskedEmail: masked};
+  }
+);
+
+/**
+ * Step 2 of forgot-PIN: verifies the emailed code and sets the new PIN.
+ */
+export const confirmEditPinReset = onCall({enforceAppCheck: false}, async (request: CallableRequest<any>) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Must be authenticated");
+  const uid = request.auth.uid;
+  const {code, newPin} = request.data || {};
+
+  if (!newPin || !/^\d{4}$/.test(newPin)) {
+    throw new HttpsError("invalid-argument", "PIN must be exactly 4 digits");
+  }
+
+  await checkRateLimit(uid, "confirmEditPinReset", 5);
+
+  const userRef = db.doc(`users/${uid}`);
+  const userSnap = await userRef.get();
+  const data = userSnap.data() || {};
+  const storedHash = data.editPinResetCodeHash as string | undefined;
+  const storedSalt = data.editPinResetCodeSalt as string | undefined;
+  const expiresAt = data.editPinResetExpiresAt as number | undefined;
+
+  if (!storedHash || !expiresAt || Date.now() > expiresAt) {
+    throw new HttpsError("failed-precondition", "Reset code has expired. Request a new one.");
+  }
+  if (hashPin(code || "", storedSalt || "") !== storedHash) {
+    throw new HttpsError("permission-denied", "Incorrect reset code");
+  }
+
+  const newSalt = crypto.randomBytes(16).toString("hex");
+  await userRef.set({
+    editPinHash: hashPin(newPin, newSalt),
+    editPinSalt: newSalt,
+    editPinResetCodeHash: admin.firestore.FieldValue.delete(),
+    editPinResetCodeSalt: admin.firestore.FieldValue.delete(),
+    editPinResetExpiresAt: admin.firestore.FieldValue.delete(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  }, {merge: true});
+
+  return {success: true};
+});
 
 // ── Tax threshold constants (Nigeria Tax Act 2025) ──
 const SMALL_COMPANY_THRESHOLD = 100_000_000;

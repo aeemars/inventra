@@ -154,8 +154,7 @@ class AuthRepositoryImpl implements AuthRepository {
           lastLoginAt: now,
           createdAt: now,
           updatedAt: now,
-          editPin: null,
-          editPinRecoveryCode: null,
+          hasEditPin: false,
         );
 
         await _firestore
@@ -187,8 +186,6 @@ class AuthRepositoryImpl implements AuthRepository {
     String? phoneNumber,
     String? shopName,
     String? fcmToken,
-    String? editPin,
-    String? editPinRecoveryCode,
   }) async {
     final uid = _auth.currentUser?.uid;
     if (uid == null) throw const AuthFailure(message: 'Not authenticated');
@@ -201,10 +198,6 @@ class AuthRepositoryImpl implements AuthRepository {
     if (phoneNumber != null) updates['phoneNumber'] = phoneNumber;
     if (shopName != null) updates['shopName'] = shopName;
     if (fcmToken != null) updates['fcmToken'] = fcmToken;
-    if (editPin != null) updates['editPin'] = editPin;
-    if (editPinRecoveryCode != null) {
-      updates['editPinRecoveryCode'] = editPinRecoveryCode;
-    }
 
     await _firestore
         .collection(FirestorePaths.users)
@@ -218,9 +211,49 @@ class AuthRepositoryImpl implements AuthRepository {
         phoneNumber: phoneNumber,
         shopName: shopName,
         fcmToken: fcmToken,
-        editPin: editPin,
-        editPinRecoveryCode: editPinRecoveryCode,
       );
+    }
+  }
+
+  @override
+  Future<void> setEditPin({required String newPin, String? currentPin}) async {
+    try {
+      final callable = _functions.httpsCallable('setEditPin');
+      await callable.call({'newPin': newPin, 'currentPin': currentPin});
+    } catch (e) {
+      throw _handleException(e);
+    }
+  }
+
+  @override
+  Future<bool> verifyEditPin(String pin) async {
+    try {
+      final callable = _functions.httpsCallable('verifyEditPin');
+      final result = await callable.call({'pin': pin});
+      return (result.data as Map)['valid'] == true;
+    } catch (e) {
+      throw _handleException(e);
+    }
+  }
+
+  @override
+  Future<String> requestEditPinReset() async {
+    try {
+      final callable = _functions.httpsCallable('requestEditPinReset');
+      final result = await callable.call({});
+      return (result.data as Map)['maskedEmail'] as String;
+    } catch (e) {
+      throw _handleException(e);
+    }
+  }
+
+  @override
+  Future<void> confirmEditPinReset({required String code, required String newPin}) async {
+    try {
+      final callable = _functions.httpsCallable('confirmEditPinReset');
+      await callable.call({'code': code, 'newPin': newPin});
+    } catch (e) {
+      throw _handleException(e);
     }
   }
 
@@ -291,8 +324,7 @@ class AuthRepositoryImpl implements AuthRepository {
         lastLoginAt: now,
         createdAt: now,
         updatedAt: now,
-        editPin: null,
-        editPinRecoveryCode: null,
+        hasEditPin: false,
       );
 
       await _firestore
@@ -403,8 +435,7 @@ class AuthRepositoryImpl implements AuthRepository {
         lastLoginAt: now,
         createdAt: now,
         updatedAt: now,
-        editPin: null,
-        editPinRecoveryCode: null,
+        hasEditPin: false,
       );
 
       await _firestore

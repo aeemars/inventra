@@ -1,4 +1,3 @@
-import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
@@ -27,35 +26,31 @@ class _EditPinGuardState extends ConsumerState<EditPinGuard> {
   // PIN entry states
   String _pin = '';
   String _errorMessage = '';
+  bool _isVerifying = false;
 
   // Setup PIN states
   bool _isSettingUp = false;
   String _firstPin = '';
   String _confirmPin = '';
   bool _confirming = false;
-  String? _generatedRecoveryCode;
-  bool _showRecoveryCodeScreen = false;
 
-  // Recovery reset states
-  bool _isRecovering = false;
-  final _recoveryController = TextEditingController();
-  String _recoveryError = '';
+  // Emailed reset states
+  bool _isResetting = false;
+  bool _showResetCodeScreen = false;
+  String? _maskedEmail;
+  final _codeController = TextEditingController();
+  final _newPinController = TextEditingController();
+  String _resetError = '';
 
   @override
   void dispose() {
-    _recoveryController.dispose();
+    _codeController.dispose();
+    _newPinController.dispose();
     super.dispose();
   }
 
-  String _generateRecoveryCode() {
-    final rand = Random();
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    String nextPart(int len) =>
-        List.generate(len, (index) => chars[rand.nextInt(chars.length)]).join();
-    return 'INV-${nextPart(4)}-${nextPart(4)}';
-  }
-
   void _onKeyPress(String val, bool forSetup) {
+    if (_isVerifying) return;
     setState(() {
       _errorMessage = '';
       if (forSetup) {
@@ -86,6 +81,7 @@ class _EditPinGuardState extends ConsumerState<EditPinGuard> {
   }
 
   void _onBackspace(bool forSetup) {
+    if (_isVerifying) return;
     setState(() {
       _errorMessage = '';
       if (forSetup) {
@@ -109,6 +105,7 @@ class _EditPinGuardState extends ConsumerState<EditPinGuard> {
   }
 
   void _onClear(bool forSetup) {
+    if (_isVerifying) return;
     setState(() {
       _errorMessage = '';
       if (forSetup) {
@@ -121,17 +118,28 @@ class _EditPinGuardState extends ConsumerState<EditPinGuard> {
     });
   }
 
-  void _verifyEnteredPin() {
-    final user = ref.read(currentUserProvider);
-    if (user == null) return;
-
-    if (user.editPin == _pin) {
-      ref.read(editPinUnlockedProvider.notifier).state = true;
-    } else {
-      setState(() {
-        _pin = '';
-        _errorMessage = 'Incorrect PIN. Please try again.';
-      });
+  Future<void> _verifyEnteredPin() async {
+    final enteredPin = _pin;
+    setState(() => _isVerifying = true);
+    try {
+      final valid = await ref.read(authRepositoryProvider).verifyEditPin(enteredPin);
+      if (valid && mounted) {
+        ref.read(editPinUnlockedProvider.notifier).state = true;
+      } else if (mounted) {
+        setState(() {
+          _pin = '';
+          _errorMessage = 'Incorrect PIN. Please try again.';
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _pin = '';
+          _errorMessage = 'Verification error: ${e.toString()}';
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _isVerifying = false);
     }
   }
 
@@ -146,50 +154,92 @@ class _EditPinGuardState extends ConsumerState<EditPinGuard> {
       return;
     }
 
-    final code = _generateRecoveryCode();
-    final success = await ref
-        .read(authControllerProvider.notifier)
-        .setEditPin(_firstPin, code);
-
-    if (success && mounted) {
-      ref.invalidate(authStateProvider);
-      setState(() {
-        _generatedRecoveryCode = code;
-        _showRecoveryCodeScreen = true;
-      });
-    } else if (mounted) {
-      setState(() {
-        _errorMessage = 'Failed to save PIN. Try again.';
-        _firstPin = '';
-        _confirmPin = '';
-        _confirming = false;
-      });
+    setState(() => _isVerifying = true);
+    try {
+      await ref.read(authRepositoryProvider).setEditPin(newPin: _firstPin);
+      if (mounted) {
+        ref.invalidate(authStateProvider);
+        ref.read(editPinUnlockedProvider.notifier).state = true;
+        setState(() {
+          _isSettingUp = false;
+          _confirming = false;
+          _firstPin = '';
+          _confirmPin = '';
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Failed to save PIN. Try again.';
+          _firstPin = '';
+          _confirmPin = '';
+          _confirming = false;
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _isVerifying = false);
     }
   }
 
-  void _verifyRecoveryCode() {
-    final user = ref.read(currentUserProvider);
-    if (user == null) return;
+  Future<void> _requestReset() async {
+    setState(() {
+      _isVerifying = true;
+      _resetError = '';
+    });
+    try {
+      final masked = await ref.read(authRepositoryProvider).requestEditPinReset();
+      if (mounted) {
+        setState(() {
+          _maskedEmail = masked;
+          _showResetCodeScreen = true;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _resetError = 'Could not send reset email: $e';
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _isVerifying = false);
+    }
+  }
 
-    final entered = _recoveryController.text.trim().toUpperCase();
-    final actual = user.editPinRecoveryCode?.trim().toUpperCase();
+  Future<void> _confirmReset() async {
+    final code = _codeController.text.trim();
+    final newPin = _newPinController.text.trim();
 
-    if (actual != null && entered == actual) {
-      setState(() {
-        _isRecovering = false;
-        _isSettingUp = true;
-        _firstPin = '';
-        _confirmPin = '';
-        _confirming = false;
-        _pin = '';
-        _errorMessage = '';
-        _recoveryController.clear();
-        _recoveryError = '';
-      });
-    } else {
-      setState(() {
-        _recoveryError = 'Invalid recovery code. Please check spelling.';
-      });
+    if (code.length != 6) {
+      setState(() => _resetError = 'Reset code must be 6 digits');
+      return;
+    }
+    if (!RegExp(r'^\d{4}$').hasMatch(newPin)) {
+      setState(() => _resetError = 'New PIN must be exactly 4 digits');
+      return;
+    }
+
+    setState(() {
+      _isVerifying = true;
+      _resetError = '';
+    });
+    try {
+      await ref.read(authRepositoryProvider).confirmEditPinReset(code: code, newPin: newPin);
+      if (mounted) {
+        ref.invalidate(authStateProvider);
+        ref.read(editPinUnlockedProvider.notifier).state = true;
+        setState(() {
+          _isResetting = false;
+          _showResetCodeScreen = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _resetError = 'Reset failed: $e';
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _isVerifying = false);
     }
   }
 
@@ -199,14 +249,14 @@ class _EditPinGuardState extends ConsumerState<EditPinGuard> {
     if (isUnlocked) return widget.child;
 
     final user = ref.watch(currentUserProvider);
-    final hasPin = user?.editPin != null && user!.editPin!.isNotEmpty;
+    final hasPin = user?.hasEditPin ?? false;
 
-    if (_showRecoveryCodeScreen) {
-      return _buildRecoveryDisplay();
+    if (_showResetCodeScreen) {
+      return _buildResetCodeScreen();
     }
 
-    if (_isRecovering) {
-      return _buildRecoveryInputView();
+    if (_isResetting) {
+      return _buildRequestResetView();
     }
 
     if (_isSettingUp || !hasPin) {
@@ -253,7 +303,7 @@ class _EditPinGuardState extends ConsumerState<EditPinGuard> {
       width: 72,
       height: 72,
       child: ElevatedButton(
-        onPressed: () => _onKeyPress(val, forSetup),
+        onPressed: _isVerifying ? null : () => _onKeyPress(val, forSetup),
         style: ElevatedButton.styleFrom(
           shape: const CircleBorder(),
           backgroundColor: context.appSurfaceRaised,
@@ -273,7 +323,7 @@ class _EditPinGuardState extends ConsumerState<EditPinGuard> {
       width: 72,
       height: 72,
       child: OutlinedButton(
-        onPressed: onTap,
+        onPressed: _isVerifying ? null : onTap,
         style: OutlinedButton.styleFrom(
           shape: const CircleBorder(),
           side: BorderSide(color: context.appCardBorder),
@@ -350,7 +400,13 @@ class _EditPinGuardState extends ConsumerState<EditPinGuard> {
                 }),
               ),
               const SizedBox(height: 16),
-              if (_errorMessage.isNotEmpty)
+              if (_isVerifying)
+                const SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              else if (_errorMessage.isNotEmpty)
                 Text(
                   _errorMessage,
                   style: const TextStyle(color: AppColors.error, fontSize: 13),
@@ -366,97 +422,7 @@ class _EditPinGuardState extends ConsumerState<EditPinGuard> {
     );
   }
 
-  // 2. Recovery Code Setup Display
-  Widget _buildRecoveryDisplay() {
-    return Scaffold(
-      backgroundColor: context.appBackground,
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(28),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(
-                Icons.security_rounded,
-                color: AppColors.success,
-                size: 72,
-              ),
-              const SizedBox(height: 24),
-              Text(
-                'PIN Configured Successfully!',
-                style: AppTypography.h2.copyWith(color: context.appTextPrimary),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                'Below is your recovery code. Keep this code safe. '
-                'It is the only way to reset your PIN if you forget it.',
-                textAlign: TextAlign.center,
-                style: TextStyle(height: 1.4),
-              ),
-              const SizedBox(height: 32),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
-                decoration: BoxDecoration(
-                  color: context.appSurfaceRaised,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: AppColors.success.withValues(alpha: 0.3), width: 1.5),
-                ),
-                child: SelectableText(
-                  _generatedRecoveryCode ?? '',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 26,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 2,
-                    color: AppColors.success,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.info_outline_rounded, size: 16, color: Colors.orange),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      'Store this securely. It will not be shown again.',
-                      style: TextStyle(fontSize: 12, color: context.appTextSecondary),
-                    ),
-                  ),
-                ],
-              ),
-              const Spacer(),
-              SizedBox(
-                width: double.infinity,
-                height: 50,
-                child: ElevatedButton(
-                  onPressed: () {
-                    setState(() {
-                      _showRecoveryCodeScreen = false;
-                      _isSettingUp = false;
-                    });
-                    ref.read(editPinUnlockedProvider.notifier).state = true;
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: const Text('Got it, proceed'),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  // 3. Unlock Entry Screen
+  // 2. Unlock Entry Screen
   Widget _buildUnlockView() {
     return Scaffold(
       backgroundColor: context.appBackground,
@@ -502,7 +468,13 @@ class _EditPinGuardState extends ConsumerState<EditPinGuard> {
                 }),
               ),
               const SizedBox(height: 16),
-              if (_errorMessage.isNotEmpty)
+              if (_isVerifying)
+                const SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              else if (_errorMessage.isNotEmpty)
                 Text(
                   _errorMessage,
                   style: const TextStyle(color: AppColors.error, fontSize: 13),
@@ -511,9 +483,8 @@ class _EditPinGuardState extends ConsumerState<EditPinGuard> {
               TextButton(
                 onPressed: () {
                   setState(() {
-                    _isRecovering = true;
-                    _recoveryError = '';
-                    _recoveryController.clear();
+                    _isResetting = true;
+                    _resetError = '';
                   });
                 },
                 child: const Text(
@@ -531,8 +502,8 @@ class _EditPinGuardState extends ConsumerState<EditPinGuard> {
     );
   }
 
-  // 4. Recovery Input Code View
-  Widget _buildRecoveryInputView() {
+  // 3. Request Reset View (Step 1 of forgot PIN)
+  Widget _buildRequestResetView() {
     return Scaffold(
       backgroundColor: context.appBackground,
       appBar: AppBar(
@@ -540,12 +511,12 @@ class _EditPinGuardState extends ConsumerState<EditPinGuard> {
           icon: const Icon(Icons.arrow_back_rounded),
           onPressed: () {
             setState(() {
-              _isRecovering = false;
-              _recoveryError = '';
+              _isResetting = false;
+              _resetError = '';
             });
           },
         ),
-        title: const Text('Reset PIN'),
+        title: const Text('Reset Edit PIN'),
       ),
       body: SafeArea(
         child: Padding(
@@ -554,47 +525,138 @@ class _EditPinGuardState extends ConsumerState<EditPinGuard> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const SizedBox(height: 16),
+              const Icon(Icons.mark_email_read_outlined, size: 56, color: AppColors.primary),
+              const SizedBox(height: 16),
               Text(
-                'Reset Edit PIN',
-                style: AppTypography.h1.copyWith(color: context.appTextPrimary),
+                'Email PIN Reset Code',
+                style: AppTypography.h2.copyWith(color: context.appTextPrimary),
               ),
               const SizedBox(height: 8),
               Text(
-                'Enter the 8-character recovery code generated during PIN setup to reset your PIN.',
+                'We will send a 6-digit reset code to your registered email address to verify your identity.',
                 style: TextStyle(color: context.appTextSecondary, height: 1.4),
               ),
-              const SizedBox(height: 32),
-              TextField(
-                controller: _recoveryController,
-                autofocus: true,
-                textCapitalization: TextCapitalization.characters,
-                decoration: InputDecoration(
-                  labelText: 'Recovery Code',
-                  hintText: 'INV-XXXX-XXXX',
-                  prefixIcon: const Icon(Icons.vpn_key_outlined),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  errorText: _recoveryError.isNotEmpty ? _recoveryError : null,
+              const SizedBox(height: 24),
+              if (_resetError.isNotEmpty)
+                Text(
+                  _resetError,
+                  style: const TextStyle(color: AppColors.error, fontSize: 13),
                 ),
-              ),
               const Spacer(),
               SizedBox(
                 width: double.infinity,
                 height: 50,
                 child: ElevatedButton(
-                  onPressed: _verifyRecoveryCode,
+                  onPressed: _isVerifying ? null : _requestReset,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
-                  child: const Text('Verify and Reset'),
+                  child: _isVerifying
+                      ? const CircularProgressIndicator(color: Colors.white, strokeWidth: 2)
+                      : const Text('Send Reset Code'),
                 ),
               ),
               const SizedBox(height: 16),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // 4. Reset Code Confirm View (Step 2 of forgot PIN)
+  Widget _buildResetCodeScreen() {
+    return Scaffold(
+      backgroundColor: context.appBackground,
+      appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_rounded),
+          onPressed: () {
+            setState(() {
+              _showResetCodeScreen = false;
+              _isResetting = false;
+              _resetError = '';
+              _codeController.clear();
+              _newPinController.clear();
+            });
+          },
+        ),
+        title: const Text('Confirm PIN Reset'),
+      ),
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SizedBox(height: 16),
+                Text(
+                  'Enter Reset Code',
+                  style: AppTypography.h2.copyWith(color: context.appTextPrimary),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'A 6-digit code was sent to ${_maskedEmail ?? "your email"}. Enter the code and your new 4-digit PIN below.',
+                  style: TextStyle(color: context.appTextSecondary, height: 1.4),
+                ),
+                const SizedBox(height: 28),
+                TextField(
+                  controller: _codeController,
+                  keyboardType: TextInputType.number,
+                  maxLength: 6,
+                  decoration: InputDecoration(
+                    labelText: '6-Digit Reset Code',
+                    hintText: '123456',
+                    prefixIcon: const Icon(Icons.pin_outlined),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: _newPinController,
+                  keyboardType: TextInputType.number,
+                  obscureText: true,
+                  maxLength: 4,
+                  decoration: InputDecoration(
+                    labelText: 'New 4-Digit PIN',
+                    hintText: '••••',
+                    prefixIcon: const Icon(Icons.lock_outline),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                if (_resetError.isNotEmpty)
+                  Text(
+                    _resetError,
+                    style: const TextStyle(color: AppColors.error, fontSize: 13),
+                  ),
+                const SizedBox(height: 32),
+                SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: ElevatedButton(
+                    onPressed: _isVerifying ? null : _confirmReset,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: _isVerifying
+                        ? const CircularProgressIndicator(color: Colors.white, strokeWidth: 2)
+                        : const Text('Confirm & Reset PIN'),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

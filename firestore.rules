@@ -38,12 +38,13 @@ service cloud.firestore {
         && request.resource.data.email is string
         && request.resource.data.displayName is string
         && request.resource.data.displayName.size() < 100
-        && (!('editPin' in request.resource.data) || request.resource.data.editPin == null)
-        && (!('editPinRecoveryCode' in request.resource.data) || request.resource.data.editPinRecoveryCode == null);
+        && (!('editPinHash' in request.resource.data) || request.resource.data.editPinHash == null)
+        && (!('editPinSalt' in request.resource.data) || request.resource.data.editPinSalt == null);
       allow update: if isOwner(uid)
         && (!request.resource.data.diff(resource.data).affectedKeys().hasAny([
           'email', 'createdAt', 'isActive', 'role', 
-          'editPin', 'editPinRecoveryCode'
+          'editPinHash', 'editPinSalt',
+          'editPinResetCodeHash', 'editPinResetCodeSalt', 'editPinResetExpiresAt'
         ]));
       allow delete: if false;
     }
@@ -133,7 +134,7 @@ service cloud.firestore {
       // Settings Subcollection
       match /settings/{docId} {
         allow read: if isShopMember(shopId);
-        allow write: if isShopMember(shopId) || (isSignedIn() && request.auth.uid != null);
+        allow write: if hasRole(shopId, 'owner');
       }
 
       // FCM Tokens Subcollection

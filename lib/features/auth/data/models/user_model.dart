@@ -15,8 +15,7 @@ class UserModel {
   final DateTime? lastLoginAt;
   final DateTime createdAt;
   final DateTime updatedAt;
-  final String? editPin;
-  final String? editPinRecoveryCode;
+  final bool hasEditPin;
 
   const UserModel({
     required this.uid,
@@ -31,8 +30,7 @@ class UserModel {
     this.lastLoginAt,
     required this.createdAt,
     required this.updatedAt,
-    this.editPin,
-    this.editPinRecoveryCode,
+    this.hasEditPin = false,
   });
 
   factory UserModel.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
@@ -50,13 +48,12 @@ class UserModel {
       lastLoginAt: (data['lastLoginAt'] as Timestamp?)?.toDate(),
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       updatedAt: (data['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
-      editPin: data['editPin'] as String?,
-      editPinRecoveryCode: data['editPinRecoveryCode'] as String?,
+      hasEditPin: data['editPinHash'] != null,
     );
   }
 
   Map<String, dynamic> toFirestore() {
-    final map = <String, dynamic>{
+    return {
       'uid': uid,
       'email': email,
       'displayName': displayName,
@@ -70,9 +67,6 @@ class UserModel {
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(updatedAt),
     };
-    if (editPin != null) map['editPin'] = editPin;
-    if (editPinRecoveryCode != null) map['editPinRecoveryCode'] = editPinRecoveryCode;
-    return map;
   }
 
   AppUser toEntity() {
@@ -89,8 +83,7 @@ class UserModel {
       lastLoginAt: lastLoginAt,
       createdAt: createdAt,
       updatedAt: updatedAt,
-      editPin: editPin,
-      editPinRecoveryCode: editPinRecoveryCode,
+      hasEditPin: hasEditPin,
     );
   }
 
@@ -108,8 +101,7 @@ class UserModel {
       lastLoginAt: user.lastLoginAt,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
-      editPin: user.editPin,
-      editPinRecoveryCode: user.editPinRecoveryCode,
+      hasEditPin: user.hasEditPin,
     );
   }
 }

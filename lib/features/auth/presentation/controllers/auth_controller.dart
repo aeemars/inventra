@@ -225,13 +225,10 @@ class AuthController extends StateNotifier<AuthState> {
     }
   }
 
-  Future<bool> setEditPin(String pin, String recoveryCode) async {
+  Future<bool> setEditPin(String newPin, {String? currentPin}) async {
     state = state.copyWith(isLoading: true, error: null, isSuccess: false);
     try {
-      await _repository.updateProfile(
-        editPin: pin,
-        editPinRecoveryCode: recoveryCode,
-      );
+      await _repository.setEditPin(newPin: newPin, currentPin: currentPin);
       state = state.copyWith(
           isLoading: false,
           isSuccess: true,
@@ -291,9 +288,27 @@ class _UnavailableAuthRepository implements AuthRepository {
     String? phoneNumber,
     String? shopName,
     String? fcmToken,
-    String? editPin,
-    String? editPinRecoveryCode,
   }) {
+    throw AuthFailure(message: message, code: 'auth-unavailable');
+  }
+
+  @override
+  Future<void> setEditPin({required String newPin, String? currentPin}) {
+    throw AuthFailure(message: message, code: 'auth-unavailable');
+  }
+
+  @override
+  Future<bool> verifyEditPin(String pin) {
+    throw AuthFailure(message: message, code: 'auth-unavailable');
+  }
+
+  @override
+  Future<String> requestEditPinReset() {
+    throw AuthFailure(message: message, code: 'auth-unavailable');
+  }
+
+  @override
+  Future<void> confirmEditPinReset({required String code, required String newPin}) {
     throw AuthFailure(message: message, code: 'auth-unavailable');
   }
 

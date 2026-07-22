@@ -14,8 +14,7 @@ class AppUser extends Equatable {
   final DateTime? lastLoginAt;
   final DateTime createdAt;
   final DateTime updatedAt;
-  final String? editPin;
-  final String? editPinRecoveryCode;
+  final bool hasEditPin;
 
   const AppUser({
     required this.uid,
@@ -30,8 +29,7 @@ class AppUser extends Equatable {
     this.lastLoginAt,
     required this.createdAt,
     required this.updatedAt,
-    this.editPin,
-    this.editPinRecoveryCode,
+    this.hasEditPin = false,
   });
 
   bool get hasShop => shopId != null && shopId!.isNotEmpty;
@@ -49,8 +47,7 @@ class AppUser extends Equatable {
     DateTime? lastLoginAt,
     DateTime? createdAt,
     DateTime? updatedAt,
-    String? editPin,
-    String? editPinRecoveryCode,
+    bool? hasEditPin,
   }) {
     return AppUser(
       uid: uid ?? this.uid,
@@ -65,8 +62,7 @@ class AppUser extends Equatable {
       lastLoginAt: lastLoginAt ?? this.lastLoginAt,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
-      editPin: editPin ?? this.editPin,
-      editPinRecoveryCode: editPinRecoveryCode ?? this.editPinRecoveryCode,
+      hasEditPin: hasEditPin ?? this.hasEditPin,
     );
   }
 
@@ -82,7 +78,6 @@ class AppUser extends Equatable {
         fcmToken,
         isActive,
         lastLoginAt,
-        editPin,
-        editPinRecoveryCode,
+        hasEditPin,
       ];
 }
