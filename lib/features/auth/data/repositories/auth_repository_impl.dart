@@ -201,6 +201,20 @@ class AuthRepositoryImpl implements AuthRepository {
         .doc(uid)
         .update(updates);
 
+    if (shopName != null &&
+        _cachedUser?.shopId != null &&
+        _cachedUser!.shopId!.isNotEmpty) {
+      try {
+        await _firestore
+            .collection(FirestorePaths.shops)
+            .doc(_cachedUser!.shopId!)
+            .update({
+          'name': shopName,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      } catch (_) {}
+    }
+
     if (_cachedUser != null) {
       _cachedUser = _cachedUser!.copyWith(
         displayName: displayName,

@@ -13,6 +13,7 @@ import '../../../../core/widgets/app_button.dart';
 import '../../../../core/widgets/app_text_field.dart';
 import '../../../../core/theme/theme_provider.dart';
 import '../../../../core/extensions/theme_ext.dart';
+import '../../domain/entities/app_user.dart';
 import '../controllers/auth_controller.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
@@ -172,9 +173,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
 
     if (success) {
-      // Force re-fetch user profile from Firestore so the updated
-      // photoUrl is reflected everywhere via currentUserProvider.
-      ref.invalidate(authStateProvider);
+      setState(() => _selectedImage = null);
     } else {
       setState(() => _selectedImage = null);
     }
@@ -191,7 +190,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             );
 
     if (success && mounted) {
-      ref.invalidate(authStateProvider);
       context.showAppSnackBar(
         message: 'Profile updated successfully',
         type: AppSnackBarType.success,
@@ -236,6 +234,23 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final user = ref.watch(currentUserProvider);
     final authState = ref.watch(authControllerProvider);
 
+    ref.listen<AppUser?>(currentUserProvider, (previous, next) {
+      if (next != null) {
+        if (_nameController.text != next.displayName) {
+          _nameController.text = next.displayName;
+        }
+        if (_emailController.text != next.email) {
+          _emailController.text = next.email;
+        }
+        if (_phoneController.text != (next.phoneNumber ?? '')) {
+          _phoneController.text = next.phoneNumber ?? '';
+        }
+        if (_shopNameController.text != (next.shopName ?? '')) {
+          _shopNameController.text = next.shopName ?? '';
+        }
+      }
+    });
+
     ref.listen(authControllerProvider, (_, state) {
       if (state.error != null) {
         context.showAppSnackBar(
@@ -256,13 +271,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       appBar: AppBar(
         backgroundColor: context.appSurface,
         elevation: 0,
-        leading: GestureDetector(
-          onTap: () => context.pop(),
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Icon(Icons.store_rounded,
-                color: context.appTextPrimary, size: 24),
-          ),
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back_rounded,
+              color: context.appTextPrimary, size: 24),
+          onPressed: () {
+            if (context.canPop()) {
+              context.pop();
+            } else {
+              context.go('/dashboard');
+            }
+          },
         ),
         title: Text('Edit Profile',
             style: AppTypography.h3.copyWith(color: context.appTextPrimary)),
