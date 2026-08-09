@@ -25,8 +25,35 @@ import '../constants/app_colors.dart';
 import '../extensions/theme_ext.dart';
 import 'scanner_route_access.dart';
 
-final routerProvider = Provider<GoRouter>((ref) {
+/// Minimal auth state used only for routing decisions.
+/// Changes to profile fields (name, photo, phone) do NOT trigger a router rebuild.
+class _AuthRoutingState {
+  final bool isLoggedIn;
+  final bool hasShop;
+
+  const _AuthRoutingState({required this.isLoggedIn, required this.hasShop});
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is _AuthRoutingState &&
+          isLoggedIn == other.isLoggedIn &&
+          hasShop == other.hasShop;
+
+  @override
+  int get hashCode => Object.hash(isLoggedIn, hasShop);
+}
+
+final _authRoutingStateProvider = Provider<_AuthRoutingState>((ref) {
   final user = ref.watch(currentUserProvider);
+  return _AuthRoutingState(
+    isLoggedIn: user != null,
+    hasShop: user?.hasShop ?? false,
+  );
+});
+
+final routerProvider = Provider<GoRouter>((ref) {
+  final authRouting = ref.watch(_authRoutingStateProvider);
 
   return GoRouter(
     initialLocation: '/',
@@ -34,7 +61,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       final loc = state.matchedLocation;
 
       if (loc == '/shop-setup') {
-        if (user != null && user.hasShop) {
+        if (authRouting.isLoggedIn && authRouting.hasShop) {
           return '/dashboard';
         }
         return null;
@@ -43,7 +70,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       const publicRoutes = ['/', '/login', '/forgot-password'];
       if (publicRoutes.contains(loc)) return null;
 
-      if (user != null && !user.hasShop) {
+      if (authRouting.isLoggedIn && !authRouting.hasShop) {
         return '/shop-setup';
       }
 
