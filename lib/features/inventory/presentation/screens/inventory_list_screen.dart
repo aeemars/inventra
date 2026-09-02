@@ -8,7 +8,9 @@ import '../../../../core/utils/formatters.dart';
 import '../../../../core/widgets/app_card.dart';
 import '../../../../core/widgets/app_text_field.dart';
 import '../../../../core/widgets/empty_state.dart';
+import '../../../../core/widgets/pending_sync_badge.dart';
 import '../../../../core/extensions/theme_ext.dart';
+import '../../../../core/sync/sync_providers.dart';
 import '../controllers/inventory_controller.dart';
 
 /// Inventory list screen with search, filter, sort
@@ -259,14 +261,17 @@ class _SortDropdown extends ConsumerWidget {
   }
 }
 
-class _ProductListTile extends StatelessWidget {
+class _ProductListTile extends ConsumerWidget {
   final dynamic product;
   final VoidCallback onTap;
 
   const _ProductListTile({required this.product, required this.onTap});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final queueItems = ref.watch(syncQueueItemsProvider).value ?? [];
+    final isPendingSync = queueItems.any((i) => i.entityId == product.id);
+
     return AppCard(
       onTap: onTap,
       padding: const EdgeInsets.all(12),
@@ -306,10 +311,18 @@ class _ProductListTile extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 2),
-                Text(
-                  'SKU: ${product.sku}',
-                  style: AppTypography.bodySmall
-                      .copyWith(color: context.appTextTertiary),
+                Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 6,
+                  runSpacing: 3,
+                  children: [
+                    Text(
+                      'SKU: ${product.sku}',
+                      style: AppTypography.bodySmall
+                          .copyWith(color: context.appTextTertiary),
+                    ),
+                    if (isPendingSync) const PendingSyncBadge(compact: true),
+                  ],
                 ),
               ],
             ),

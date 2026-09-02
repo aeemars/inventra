@@ -6,6 +6,8 @@ import '../../../../core/constants/app_typography.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../core/widgets/app_card.dart';
 import '../../../../core/widgets/empty_state.dart';
+import '../../../../core/widgets/pending_sync_badge.dart';
+import '../../../../core/sync/sync_providers.dart';
 import '../../../../core/extensions/theme_ext.dart';
 import '../controllers/inventory_controller.dart';
 
@@ -15,6 +17,7 @@ class LowStockScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final products = ref.watch(lowStockProductsProvider);
+    final queueItems = ref.watch(syncQueueItemsProvider).value ?? [];
     final sortedProducts = [...products]..sort((a, b) {
         final aGroup = a.isOutOfStock ? 0 : 1;
         final bGroup = b.isOutOfStock ? 0 : 1;
@@ -83,6 +86,7 @@ class LowStockScreen extends ConsumerWidget {
                         const SizedBox(height: AppSizes.sm),
                     itemBuilder: (context, index) {
                       final product = sortedProducts[index];
+                      final isPendingSync = queueItems.any((i) => i.entityId == product.id);
                       final statusColor = product.isOutOfStock
                           ? AppColors.error
                           : AppColors.warning;
@@ -116,13 +120,27 @@ class LowStockScreen extends ConsumerWidget {
                                       fontWeight: FontWeight.w600,
                                       color: context.appTextPrimary,
                                     ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
                                   ),
                                   const SizedBox(height: 4),
-                                  Text(
-                                    product.categoryName ?? 'Uncategorized',
-                                    style: AppTypography.bodySmall.copyWith(
-                                      color: context.appTextSecondary,
-                                    ),
+                                  Wrap(
+                                    crossAxisAlignment:
+                                        WrapCrossAlignment.center,
+                                    spacing: 6,
+                                    runSpacing: 2,
+                                    children: [
+                                      Text(
+                                        product.categoryName ??
+                                            'Uncategorized',
+                                        style: AppTypography.bodySmall
+                                            .copyWith(
+                                          color: context.appTextSecondary,
+                                        ),
+                                      ),
+                                      if (isPendingSync)
+                                        const PendingSyncBadge(compact: true),
+                                    ],
                                   ),
                                 ],
                               ),

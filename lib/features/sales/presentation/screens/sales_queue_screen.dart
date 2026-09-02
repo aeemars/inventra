@@ -8,6 +8,8 @@ import '../../../../core/extensions/theme_ext.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../core/widgets/app_button.dart';
 import '../../../../core/widgets/app_card.dart';
+import '../../../../core/widgets/pending_sync_badge.dart';
+import '../../../../core/sync/sync_providers.dart';
 import '../../../scanner/presentation/controllers/scanner_controller.dart';
 import '../controllers/sales_queue_provider.dart';
 
@@ -57,6 +59,7 @@ class _SalesQueueScreenState extends ConsumerState<SalesQueueScreen> {
   Widget build(BuildContext context) {
     final queue = ref.watch(salesQueueProvider);
     final subtotal = ref.watch(salesQueueSubtotalProvider);
+    final queueItems = ref.watch(syncQueueItemsProvider).value ?? [];
 
     // Clean up controllers for removed items
     _qtyControllers.removeWhere((id, c) {
@@ -86,7 +89,10 @@ class _SalesQueueScreenState extends ConsumerState<SalesQueueScreen> {
               separatorBuilder: (_, __) => const SizedBox(height: AppSizes.sm),
               itemBuilder: (context, index) {
                 final item = queue[index];
-                final qtyController = _controllerFor(item.product.id, item.quantity);
+                final isPendingSync =
+                    queueItems.any((i) => i.entityId == item.product.id);
+                final qtyController =
+                    _controllerFor(item.product.id, item.quantity);
                 return AppCard(
                   child: Row(
                     children: [
@@ -100,10 +106,23 @@ class _SalesQueueScreenState extends ConsumerState<SalesQueueScreen> {
                                 fontWeight: FontWeight.w600,
                                 color: context.appTextPrimary,
                               ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
-                            Text(
-                              Formatters.currency(item.product.sellingPrice),
-                              style: AppTypography.bodySmall.copyWith(color: context.appTextSecondary),
+                            const SizedBox(height: 2),
+                            Wrap(
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              spacing: 6,
+                              runSpacing: 2,
+                              children: [
+                                Text(
+                                  Formatters.currency(item.product.sellingPrice),
+                                  style: AppTypography.bodySmall.copyWith(
+                                      color: context.appTextSecondary),
+                                ),
+                                if (isPendingSync)
+                                  const PendingSyncBadge(compact: true),
+                              ],
                             ),
                           ],
                         ),

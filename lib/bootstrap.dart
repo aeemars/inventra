@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hive_ce_flutter/hive_flutter.dart';
 import 'core/cache/hive_adapters.dart';
+import 'core/cache/local_database.dart';
 import 'core/notifications/fcm_service.dart';
 import 'core/notifications/local_notification_service.dart';
 import 'firebase_options.dart';
@@ -62,14 +63,15 @@ Future<void> bootstrap() async {
     }
   }
 
-  // ── Hive ──
+  // ── Hive & Local Storage ──
   try {
     await Hive.initFlutter().timeout(const Duration(seconds: 5));
-    await Hive.openBox<dynamic>('app_prefs')
-        .timeout(const Duration(seconds: 5));
     registerHiveAdapters();
+    await LocalDatabase.instance
+        .initialize()
+        .timeout(const Duration(seconds: 8));
   } catch (e) {
-    debugPrint('⚠️ Hive init failed: $e');
+    debugPrint('⚠️ Hive / LocalDatabase init failed: $e');
   }
 
   // ── Local Notifications ──

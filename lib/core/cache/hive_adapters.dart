@@ -4,15 +4,21 @@ import '../../features/inventory/domain/entities/category.dart';
 import '../../shared/models/stock_movement.dart';
 import '../../shared/models/notification_model.dart';
 import '../../shared/models/shop_settings_model.dart';
+import '../../shared/models/scan_history_entry.dart';
+import '../../features/sales/domain/sales_queue_item.dart';
+import '../sync/sync_models.dart';
 
 // ── Type IDs ──
-// Product         = 0
-// Category        = 1
-// SaleTransaction = 2
-// SaleItem        = 3
-// StockMovement   = 4
-// AppNotification = 5
-// ShopSettings    = 6
+// Product          = 0
+// Category         = 1
+// SaleTransaction  = 2
+// SaleItem         = 3
+// StockMovement    = 4
+// AppNotification  = 5
+// ShopSettings     = 6
+// ScanHistoryEntry = 7
+// SalesQueueItem   = 8
+// SyncQueueItem    = 9
 
 /// Register all Hive type adapters for offline caching
 void registerHiveAdapters() {
@@ -23,6 +29,9 @@ void registerHiveAdapters() {
   Hive.registerAdapter(StockMovementAdapter());
   Hive.registerAdapter(AppNotificationAdapter());
   Hive.registerAdapter(ShopSettingsAdapter());
+  Hive.registerAdapter(ScanHistoryEntryAdapter());
+  Hive.registerAdapter(SalesQueueItemAdapter());
+  Hive.registerAdapter(SyncQueueItemAdapter());
 }
 
 // ═══════════════════════════════════════════
@@ -353,3 +362,98 @@ class ShopSettingsAdapter extends TypeAdapter<ShopSettings> {
       ..writeByte(10)..write(obj.taxThresholdNotifiedYear);
   }
 }
+
+// ═══════════════════════════════════════════
+// ScanHistoryEntry Adapter (TypeId: 7)
+// ═══════════════════════════════════════════
+class ScanHistoryEntryAdapter extends TypeAdapter<ScanHistoryEntry> {
+  @override
+  final int typeId = 7;
+
+  @override
+  ScanHistoryEntry read(BinaryReader reader) {
+    final numFields = reader.readByte();
+    final fields = <int, dynamic>{};
+    for (int i = 0; i < numFields; i++) {
+      fields[reader.readByte()] = reader.read();
+    }
+    return ScanHistoryEntry(
+      id: fields[0] as String,
+      barcodeValue: fields[1] as String,
+      matchedProductId: fields[2] as String?,
+      matchedProductName: fields[3] as String?,
+      status: ScanMatchStatus.values.firstWhere(
+        (e) => e.name == (fields[4] as String?),
+        orElse: () => ScanMatchStatus.unmatched,
+      ),
+      scanIntent: fields[5] as String? ?? 'sale',
+      scannedBy: fields[6] as String? ?? '',
+      scannedByName: fields[7] as String? ?? '',
+      timestamp: fields[8] as DateTime? ?? DateTime.now(),
+    );
+  }
+
+  @override
+  void write(BinaryWriter writer, ScanHistoryEntry obj) {
+    writer.writeByte(9);
+    writer
+      ..writeByte(0)..write(obj.id)
+      ..writeByte(1)..write(obj.barcodeValue)
+      ..writeByte(2)..write(obj.matchedProductId)
+      ..writeByte(3)..write(obj.matchedProductName)
+      ..writeByte(4)..write(obj.status.name)
+      ..writeByte(5)..write(obj.scanIntent)
+      ..writeByte(6)..write(obj.scannedBy)
+      ..writeByte(7)..write(obj.scannedByName)
+      ..writeByte(8)..write(obj.timestamp);
+  }
+}
+
+// ═══════════════════════════════════════════
+// SalesQueueItem Adapter (TypeId: 8)
+// ═══════════════════════════════════════════
+class SalesQueueItemAdapter extends TypeAdapter<SalesQueueItem> {
+  @override
+  final int typeId = 8;
+
+  @override
+  SalesQueueItem read(BinaryReader reader) {
+    final numFields = reader.readByte();
+    final fields = <int, dynamic>{};
+    for (int i = 0; i < numFields; i++) {
+      fields[reader.readByte()] = reader.read();
+    }
+    return SalesQueueItem(
+      product: fields[0] as Product,
+      quantity: fields[1] as int,
+    );
+  }
+
+  @override
+  void write(BinaryWriter writer, SalesQueueItem obj) {
+    writer.writeByte(2);
+    writer
+      ..writeByte(0)..write(obj.product)
+      ..writeByte(1)..write(obj.quantity);
+  }
+}
+
+// ═══════════════════════════════════════════
+// SyncQueueItem Adapter (TypeId: 9)
+// ═══════════════════════════════════════════
+class SyncQueueItemAdapter extends TypeAdapter<SyncQueueItem> {
+  @override
+  final int typeId = 9;
+
+  @override
+  SyncQueueItem read(BinaryReader reader) {
+    final map = reader.readMap();
+    return SyncQueueItem.fromMap(map);
+  }
+
+  @override
+  void write(BinaryWriter writer, SyncQueueItem obj) {
+    writer.writeMap(obj.toMap());
+  }
+}
+

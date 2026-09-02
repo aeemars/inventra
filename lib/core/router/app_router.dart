@@ -23,6 +23,7 @@ import '../../features/in_demand/presentation/screens/in_demand_screen.dart';
 import '../../features/inventory/presentation/screens/low_stock_screen.dart';
 import '../constants/app_colors.dart';
 import '../extensions/theme_ext.dart';
+import '../widgets/sync_status_banner.dart';
 import 'scanner_route_access.dart';
 
 /// Minimal auth state used only for routing decisions.
@@ -170,7 +171,12 @@ class _MainShell extends StatelessWidget {
   Widget build(BuildContext context) {
     final idx = _currentIndex(state.uri.path);
     return Scaffold(
-      body: child,
+      body: Column(
+        children: [
+          const SyncStatusBanner(),
+          Expanded(child: child),
+        ],
+      ),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           color: context.appSurface,

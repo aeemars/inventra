@@ -7,10 +7,12 @@ import '../../../auth/presentation/controllers/auth_controller.dart';
 import '../../../inventory/presentation/controllers/inventory_controller.dart';
 import '../../data/scanner_repository.dart';
 import '../../../sales/domain/sales_queue_item.dart';
+import '../../../../core/sync/sync_providers.dart';
 
 // ── Repository Provider ──
 final scannerRepositoryProvider = Provider<ScannerRepository>((ref) {
-  return ScannerRepository();
+  final syncProcessor = ref.watch(syncProcessorProvider);
+  return ScannerRepository(syncProcessor: syncProcessor);
 });
 
 // ── Scan History Stream ──

@@ -104,6 +104,12 @@ service cloud.firestore {
         allow write: if false; // Backend only
       }
 
+      // Sync Operations Subcollection (Idempotency records — Backend only)
+      match /sync_operations/{operationId} {
+        allow read: if isShopMember(shopId);
+        allow write: if false; // Backend only
+      }
+
       // Scan History Subcollection
       match /scan_history/{scanId} {
         allow read: if isShopMember(shopId);

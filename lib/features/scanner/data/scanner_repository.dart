@@ -1,10 +1,12 @@
+import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:cloud_functions/cloud_functions.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:uuid/uuid.dart';
+import '../../../core/cache/local_database.dart';
 import '../../../core/constants/firestore_paths.dart';
-import '../../../core/errors/failures.dart';
-import '../../../core/errors/firestore_error_handler.dart';
+import '../../../core/sync/sync_models.dart';
+import '../../../core/sync/sync_processor.dart';
 import '../../../shared/models/scan_history_entry.dart';
+import '../../../shared/models/stock_movement.dart';
 
 /// Exception thrown when a sale would exceed available stock
 class InsufficientStockException implements Exception {
@@ -22,38 +24,105 @@ class InsufficientStockException implements Exception {
 }
 
 class ScannerRepository {
-  final FirebaseFirestore _firestore;
-  final FirebaseFunctions _functions;
+  final FirebaseFirestore? _firestore;
+  final LocalDatabase _localDb;
+  final SyncProcessor? _syncProcessor;
+
+  FirebaseFirestore get _firestoreInstance =>
+      _firestore ?? FirebaseFirestore.instance;
+
+  StreamSubscription? _remoteScanHistorySub;
+  String? _listeningShopId;
 
   ScannerRepository({
     FirebaseFirestore? firestore,
-    FirebaseFunctions? functions,
-  })  : _firestore = firestore ?? FirebaseFirestore.instance,
-        _functions = functions ?? FirebaseFunctions.instance;
+    LocalDatabase? localDb,
+    SyncProcessor? syncProcessor,
+  })  : _firestore = firestore,
+        _localDb = localDb ?? LocalDatabase.instance,
+        _syncProcessor = syncProcessor;
 
   // ── Scan History ──
 
   Future<void> saveScanEntry(String shopId, ScanHistoryEntry entry) async {
-    await _firestore
-        .collection(FirestorePaths.scanHistory(shopId))
-        .add(entry.toFirestore());
+    final entryId = entry.id.isEmpty ? const Uuid().v4() : entry.id;
+    final updatedEntry = ScanHistoryEntry(
+      id: entryId,
+      barcodeValue: entry.barcodeValue,
+      matchedProductId: entry.matchedProductId,
+      matchedProductName: entry.matchedProductName,
+      status: entry.status,
+      scanIntent: entry.scanIntent,
+      scannedBy: entry.scannedBy,
+      scannedByName: entry.scannedByName,
+      timestamp: entry.timestamp,
+    );
+
+    // 1. Save locally to Hive
+    await _localDb.scanHistoryBox.put(entryId, updatedEntry);
+
+    // 2. Queue for remote sync
+    final syncItem = SyncQueueItem(
+      localId: const Uuid().v4(),
+      shopId: shopId,
+      userId: entry.scannedBy,
+      operationType: SyncOperationType.createScan,
+      entityType: 'scan',
+      entityId: entryId,
+      payload: updatedEntry.toFirestore(),
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+    );
+
+    if (_syncProcessor != null) {
+      await _syncProcessor.enqueue(syncItem);
+    } else {
+      await _localDb.syncQueueBox.put(syncItem.localId, syncItem);
+    }
   }
 
   Stream<List<ScanHistoryEntry>> watchScanHistory(String shopId) {
-    return _firestore
-        .collection(FirestorePaths.scanHistory(shopId))
-        .orderBy('timestamp', descending: true)
-        .limit(200)
-        .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => ScanHistoryEntry.fromFirestore(doc))
-            .toList());
+    _attachRemoteScanListener(shopId);
+
+    return Stream<List<ScanHistoryEntry>>.multi((controller) {
+      void emitLocal() {
+        if (!_localDb.isInitialized) {
+          controller.add([]);
+          return;
+        }
+        final list = _localDb.scanHistoryBox.values.toList();
+        list.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+        controller.add(list.take(200).toList());
+      }
+
+      emitLocal();
+      final sub = _localDb.scanHistoryBox.watch().listen((_) => emitLocal());
+      controller.onCancel = () => sub.cancel();
+    });
   }
 
-  // ── Sale (atomic stock deduction + records via Cloud Function) ──
+  void _attachRemoteScanListener(String shopId) {
+    if (_listeningShopId == shopId) return;
+    _listeningShopId = shopId;
 
-  /// Performs an atomic sale via Cloud Function.
-  /// Returns the sale transaction ID.
+    _remoteScanHistorySub?.cancel();
+    _remoteScanHistorySub = _firestoreInstance
+        .collection(FirestorePaths.scanHistory(shopId))
+        .orderBy('timestamp', descending: true)
+        .limit(100)
+        .snapshots()
+        .listen((snapshot) async {
+      for (final doc in snapshot.docs) {
+        final entry = ScanHistoryEntry.fromFirestore(doc);
+        await _localDb.scanHistoryBox.put(doc.id, entry);
+      }
+    }, onError: (_) {});
+  }
+
+  // ── Sale (Local-first atomic stock deduction + queued server operation) ──
+
+  /// Performs a local-first single item sale.
+  /// Returns the transaction ID immediately.
   Future<String> performSale({
     required String shopId,
     required String productId,
@@ -64,30 +133,147 @@ class ScannerRepository {
     required String userId,
     required String userName,
   }) async {
-    try {
-      await FirebaseAuth.instance.currentUser?.getIdToken(true);
-      final callable = _functions.httpsCallable('validateStockDeduction');
-      final res = await callable.call({
-        'shopId': shopId,
-        'items': [
-          {
-            'productId': productId,
-            'quantity': quantity,
-          }
-        ],
-        'paymentMethod': 'cash',
-        'discount': 0,
-      });
-      final resData = Map<String, dynamic>.from(res.data as Map);
-      return resData['transactionId'] as String;
-    } on FirebaseException catch (e) {
-      throw FirestoreFailure.fromCode(e.code, rawMessage: e.message);
-    } catch (e) {
-      throw handleFirestoreException(e, context: 'complete sale');
-    }
+    return performMultiItemSale(
+      shopId: shopId,
+      items: [
+        {
+          'productId': productId,
+          'productName': productName,
+          'sku': productSku,
+          'quantity': quantity,
+          'unitPrice': unitPrice,
+        }
+      ],
+      userId: userId,
+      userName: userName,
+    );
   }
 
-  // ── Restock (atomic stock increment + record via Cloud Function) ──
+  /// Performs an atomic multi-item sale local-first.
+  /// Deducts local stock immediately, records local transaction and stock movements,
+  /// and queues an idempotent sync operation.
+  Future<String> performMultiItemSale({
+    required String shopId,
+    required List<Map<String, dynamic>> items,
+    required String userId,
+    required String userName,
+    String paymentMethod = 'cash',
+    double discount = 0.0,
+    String? note,
+  }) async {
+    final now = DateTime.now();
+
+    // 1. Verify local stock availability for all items
+    for (final item in items) {
+      final pId = item['productId'] as String;
+      final requestedQty = (item['quantity'] as num).toInt();
+      final product = _localDb.productsBox.get(pId);
+      final availableQty = product?.quantity ?? 0;
+
+      if (availableQty < requestedQty) {
+        throw InsufficientStockException(
+          available: availableQty,
+          requested: requestedQty,
+        );
+      }
+    }
+
+    // 2. Deduct local stock and generate line items
+    double subtotal = 0;
+    final saleItems = <SaleItem>[];
+    final txId = const Uuid().v4();
+
+    for (final item in items) {
+      final pId = item['productId'] as String;
+      final qty = (item['quantity'] as num).toInt();
+      final product = _localDb.productsBox.get(pId)!;
+      final unitPrice = (item['unitPrice'] as num?)?.toDouble() ?? product.sellingPrice;
+      final lineTotal = unitPrice * qty;
+      subtotal += lineTotal;
+
+      // Update local product stock
+      final newQty = product.quantity - qty;
+      await _localDb.productsBox.put(
+        pId,
+        product.copyWith(quantity: newQty, updatedAt: now),
+      );
+
+      // Record local stock movement
+      final movementId = const Uuid().v4();
+      final movement = StockMovement(
+        id: movementId,
+        productId: pId,
+        productName: product.name,
+        type: 'sale',
+        quantityChange: -qty,
+        quantityBefore: product.quantity,
+        quantityAfter: newQty,
+        reference: txId,
+        userId: userId,
+        userName: userName,
+        source: 'pos',
+        createdAt: now,
+      );
+      await _localDb.stockMovementsBox.put(movementId, movement);
+
+      saleItems.add(SaleItem(
+        productId: pId,
+        productName: product.name,
+        sku: product.sku,
+        quantity: qty,
+        unitPrice: unitPrice,
+        totalPrice: lineTotal,
+      ));
+    }
+
+    final total = subtotal - discount;
+
+    // 3. Record local SaleTransaction
+    final transaction = SaleTransaction(
+      id: txId,
+      type: 'sale',
+      items: saleItems,
+      subtotal: subtotal,
+      discount: discount,
+      taxAmount: 0,
+      total: total,
+      paymentMethod: paymentMethod,
+      status: 'completed',
+      note: note,
+      createdBy: userId,
+      createdByName: userName,
+      createdAt: now,
+    );
+    await _localDb.salesTransactionsBox.put(txId, transaction);
+
+    // 4. Enqueue idempotent createSale sync operation
+    final syncItem = SyncQueueItem(
+      localId: txId, // Stable operationId
+      shopId: shopId,
+      userId: userId,
+      operationType: SyncOperationType.createSale,
+      entityType: 'sale',
+      entityId: txId,
+      payload: {
+        'items': items,
+        'paymentMethod': paymentMethod,
+        'discount': discount,
+        'note': note,
+      },
+      createdAt: now,
+      updatedAt: now,
+    );
+
+    if (_syncProcessor != null) {
+      await _syncProcessor.enqueue(syncItem);
+    } else {
+      await _localDb.syncQueueBox.put(syncItem.localId, syncItem);
+    }
+
+    return txId;
+  }
+
+  // ── Restock (Local-first + queued operation) ──
 
   Future<void> performRestock({
     required String shopId,
@@ -99,24 +285,59 @@ class ScannerRepository {
     String? note,
     String? supplier,
   }) async {
-    try {
-      await FirebaseAuth.instance.currentUser?.getIdToken(true);
-      final callable = _functions.httpsCallable('processRestock');
-      await callable.call({
-        'shopId': shopId,
-        'productId': productId,
+    final now = DateTime.now();
+    final product = _localDb.productsBox.get(productId);
+    final currentQty = product?.quantity ?? 0;
+    final newQty = currentQty + quantity;
+
+    if (product != null) {
+      await _localDb.productsBox.put(
+        productId,
+        product.copyWith(quantity: newQty, updatedAt: now),
+      );
+    }
+
+    final movementId = const Uuid().v4();
+    final movement = StockMovement(
+      id: movementId,
+      productId: productId,
+      productName: productName,
+      type: 'restock',
+      quantityChange: quantity,
+      quantityBefore: currentQty,
+      quantityAfter: newQty,
+      reference: null,
+      userId: userId,
+      userName: userName,
+      source: 'restock',
+      createdAt: now,
+    );
+    await _localDb.stockMovementsBox.put(movementId, movement);
+
+    final syncItem = SyncQueueItem(
+      localId: const Uuid().v4(),
+      shopId: shopId,
+      userId: userId,
+      operationType: SyncOperationType.restock,
+      entityType: 'product',
+      entityId: productId,
+      payload: {
         'quantity': quantity,
         'note': note,
         'supplier': supplier,
-      });
-    } on FirebaseException catch (e) {
-      throw FirestoreFailure.fromCode(e.code, rawMessage: e.message);
-    } catch (e) {
-      throw handleFirestoreException(e, context: 'restock product');
+      },
+      createdAt: now,
+      updatedAt: now,
+    );
+
+    if (_syncProcessor != null) {
+      await _syncProcessor.enqueue(syncItem);
+    } else {
+      await _localDb.syncQueueBox.put(syncItem.localId, syncItem);
     }
   }
 
-  // ── Stock Adjustment (atomic via Cloud Function) ──
+  // ── Stock Adjustment (Local-first + queued operation) ──
 
   Future<void> performAdjustment({
     required String shopId,
@@ -127,49 +348,55 @@ class ScannerRepository {
     required String userName,
     String? reason,
   }) async {
-    try {
-      await FirebaseAuth.instance.currentUser?.getIdToken(true);
-      final docRef = _firestore.collection(FirestorePaths.products(shopId)).doc(productId);
-      final snap = await docRef.get();
-      final currentQty = (snap.data()?['quantity'] as num?)?.toInt() ?? 0;
-      final newQty = currentQty + quantityChange;
+    final now = DateTime.now();
+    final product = _localDb.productsBox.get(productId);
+    final currentQty = product?.quantity ?? 0;
+    final newQty = (currentQty + quantityChange) < 0 ? 0 : (currentQty + quantityChange);
 
-      final callable = _functions.httpsCallable('processStockAdjustment');
-      await callable.call({
-        'shopId': shopId,
-        'productId': productId,
-        'newQuantity': newQty < 0 ? 0 : newQty,
-        'reason': reason,
-      });
-    } on FirebaseException catch (e) {
-      throw FirestoreFailure.fromCode(e.code, rawMessage: e.message);
-    } catch (e) {
-      throw handleFirestoreException(e, context: 'adjust stock');
+    if (product != null) {
+      await _localDb.productsBox.put(
+        productId,
+        product.copyWith(quantity: newQty, updatedAt: now),
+      );
     }
-  }
 
-  /// Performs an atomic multi-item sale via Cloud Function.
-  Future<String> performMultiItemSale({
-    required String shopId,
-    required List<Map<String, dynamic>> items,
-    required String userId,
-    required String userName,
-  }) async {
-    try {
-      await FirebaseAuth.instance.currentUser?.getIdToken(true);
-      final callable = _functions.httpsCallable('validateStockDeduction');
-      final res = await callable.call({
-        'shopId': shopId,
-        'items': items,
-        'paymentMethod': 'cash',
-        'discount': 0,
-      });
-      final resData = Map<String, dynamic>.from(res.data as Map);
-      return resData['transactionId'] as String;
-    } on FirebaseException catch (e) {
-      throw FirestoreFailure.fromCode(e.code, rawMessage: e.message);
-    } catch (e) {
-      throw handleFirestoreException(e, context: 'complete multi-item sale');
+    final movementId = const Uuid().v4();
+    final movement = StockMovement(
+      id: movementId,
+      productId: productId,
+      productName: productName,
+      type: 'adjustment',
+      quantityChange: quantityChange,
+      quantityBefore: currentQty,
+      quantityAfter: newQty,
+      reference: null,
+      userId: userId,
+      userName: userName,
+      source: 'adjustment',
+      createdAt: now,
+    );
+    await _localDb.stockMovementsBox.put(movementId, movement);
+
+    final syncItem = SyncQueueItem(
+      localId: const Uuid().v4(),
+      shopId: shopId,
+      userId: userId,
+      operationType: SyncOperationType.stockAdjustment,
+      entityType: 'product',
+      entityId: productId,
+      payload: {
+        'quantityChange': quantityChange,
+        'newQuantity': newQty,
+        'reason': reason,
+      },
+      createdAt: now,
+      updatedAt: now,
+    );
+
+    if (_syncProcessor != null) {
+      await _syncProcessor.enqueue(syncItem);
+    } else {
+      await _localDb.syncQueueBox.put(syncItem.localId, syncItem);
     }
   }
 }

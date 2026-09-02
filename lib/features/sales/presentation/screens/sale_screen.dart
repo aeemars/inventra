@@ -8,6 +8,8 @@ import '../../../../core/extensions/theme_ext.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../core/widgets/app_button.dart';
 import '../../../../core/widgets/app_card.dart';
+import '../../../../core/widgets/pending_sync_badge.dart';
+import '../../../../core/sync/sync_providers.dart';
 import '../../../inventory/domain/entities/product.dart';
 import '../../../inventory/presentation/controllers/inventory_controller.dart';
 import '../../../scanner/presentation/controllers/scanner_controller.dart';
@@ -274,6 +276,8 @@ class _SaleScreenState extends ConsumerState<SaleScreen> {
                       );
                     }
 
+                    final queueItems = ref.watch(syncQueueItemsProvider).value ?? [];
+
                     return ListView.separated(
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
@@ -281,6 +285,7 @@ class _SaleScreenState extends ConsumerState<SaleScreen> {
                       separatorBuilder: (_, __) => const SizedBox(height: AppSizes.sm),
                       itemBuilder: (ctx, index) {
                         final product = filtered[index];
+                        final isPendingSync = queueItems.any((i) => i.entityId == product.id);
                         final isOutOfStock = product.quantity <= 0;
 
                         return AppCard(
@@ -311,9 +316,17 @@ class _SaleScreenState extends ConsumerState<SaleScreen> {
                                         overflow: TextOverflow.ellipsis,
                                       ),
                                       const SizedBox(height: 2),
-                                      Text(
-                                        'SKU: ${product.sku}',
-                                        style: AppTypography.bodySmall.copyWith(color: context.appTextSecondary),
+                                      Wrap(
+                                        crossAxisAlignment: WrapCrossAlignment.center,
+                                        spacing: 6,
+                                        runSpacing: 2,
+                                        children: [
+                                          Text(
+                                            'SKU: ${product.sku}',
+                                            style: AppTypography.bodySmall.copyWith(color: context.appTextSecondary),
+                                          ),
+                                          if (isPendingSync) const PendingSyncBadge(compact: true),
+                                        ],
                                       ),
                                     ],
                                   ),

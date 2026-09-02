@@ -1,7 +1,7 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import '../../../../shared/providers/firebase_providers.dart';
+import '../../../../core/cache/local_database.dart';
 
 
 /// Represents a single transaction log entry for display
@@ -33,37 +33,43 @@ enum TransactionFilter { all, intake, sales }
 final transactionFilterProvider =
     StateProvider<TransactionFilter>((ref) => TransactionFilter.all);
 
-/// Stream stock movements from Firestore ordered by creation date
+/// Stream stock movements from LocalDatabase (cached + local) ordered by creation date
 final stockMovementsProvider =
     StreamProvider<List<TransactionLogEntry>>((ref) {
   final shopId = ref.watch(currentShopIdProvider);
   if (shopId == null) return Stream.value([]);
 
-  final firestore = ref.watch(firestoreProvider);
+  final localDb = LocalDatabase.instance;
+  if (!localDb.isInitialized) return Stream.value([]);
 
-  return firestore
-      .collection('shops/$shopId/stock_movements')
-      .orderBy('createdAt', descending: true)
-      .limit(100)
-      .snapshots()
-      .map((snapshot) => snapshot.docs.map((doc) {
-            final data = doc.data();
-            final qtyChange = (data['quantityChange'] as num?)?.toInt() ?? 0;
-            final type = qtyChange > 0 ? 'intake' : 'sale';
-            final typeLabel =
-                qtyChange > 0 ? 'Inventory Intake' : 'Sales Order';
+  return Stream<List<TransactionLogEntry>>.multi((controller) {
+    void emitLocal() {
+      final list = localDb.stockMovementsBox.values.map((m) {
+        final qtyChange = m.quantityChange;
+        final type = qtyChange > 0 ? 'intake' : 'sale';
+        final typeLabel = qtyChange > 0 ? 'Inventory Intake' : 'Sales Order';
+        final refId =
+            m.reference ?? (m.id.length >= 8 ? m.id.substring(0, 8) : m.id);
 
-            return TransactionLogEntry(
-              id: doc.id,
-              productName: data['productName'] as String? ?? 'Unknown Product',
-              type: type,
-              typeLabel: typeLabel,
-              referenceId: data['reference'] as String? ?? doc.id.substring(0, 8),
-              quantityChange: qtyChange,
-              createdAt: (data['createdAt'] as Timestamp?)?.toDate() ??
-                  DateTime.now(),
-            );
-          }).toList());
+        return TransactionLogEntry(
+          id: m.id,
+          productName: m.productName,
+          type: type,
+          typeLabel: typeLabel,
+          referenceId: refId,
+          quantityChange: qtyChange,
+          createdAt: m.createdAt,
+        );
+      }).toList();
+
+      list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      controller.add(list.take(100).toList());
+    }
+
+    emitLocal();
+    final sub = localDb.stockMovementsBox.watch().listen((_) => emitLocal());
+    controller.onCancel = () => sub.cancel();
+  });
 });
 
 /// Filtered transaction logs

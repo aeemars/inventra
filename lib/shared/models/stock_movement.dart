@@ -71,10 +71,42 @@ class SaleTransaction extends Equatable {
     required this.createdAt,
   });
 
+  SaleTransaction copyWith({
+    String? id,
+    String? type,
+    List<SaleItem>? items,
+    double? subtotal,
+    double? discount,
+    double? taxAmount,
+    double? total,
+    String? paymentMethod,
+    String? status,
+    String? note,
+    String? createdBy,
+    String? createdByName,
+    DateTime? createdAt,
+  }) {
+    return SaleTransaction(
+      id: id ?? this.id,
+      type: type ?? this.type,
+      items: items ?? this.items,
+      subtotal: subtotal ?? this.subtotal,
+      discount: discount ?? this.discount,
+      taxAmount: taxAmount ?? this.taxAmount,
+      total: total ?? this.total,
+      paymentMethod: paymentMethod ?? this.paymentMethod,
+      status: status ?? this.status,
+      note: note ?? this.note,
+      createdBy: createdBy ?? this.createdBy,
+      createdByName: createdByName ?? this.createdByName,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
+
   int get itemCount => items.fold(0, (sum, item) => sum + item.quantity);
 
   @override
-  List<Object?> get props => [id, total, items];
+  List<Object?> get props => [id, total, items, status];
 }
 
 class SaleItem extends Equatable {

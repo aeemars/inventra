@@ -5,6 +5,8 @@ import 'package:intl/intl.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_sizes.dart';
 import '../../../../core/constants/app_typography.dart';
+import '../../../../core/widgets/pending_sync_badge.dart';
+import '../../../../core/sync/sync_providers.dart';
 import '../../../../core/extensions/theme_ext.dart';
 import '../controllers/transaction_logs_controller.dart';
 
@@ -333,13 +335,19 @@ class _TransactionList extends StatelessWidget {
 // ═══════════════════════════════════════════════════════════════
 // Transaction Tile
 // ═══════════════════════════════════════════════════════════════
-class _TransactionTile extends StatelessWidget {
+class _TransactionTile extends ConsumerWidget {
   final TransactionLogEntry entry;
 
   const _TransactionTile({required this.entry});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final queueItems = ref.watch(syncQueueItemsProvider).value ?? [];
+    final isPendingSync = queueItems.any((i) =>
+        i.entityId == entry.id ||
+        i.entityId == entry.referenceId ||
+        i.localId == entry.referenceId);
+
     final isPositive = entry.quantityChange > 0;
     final changeColor = isPositive
         ? const Color(0xFF16A34A) // green
@@ -404,15 +412,23 @@ class _TransactionTile extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 3),
-                Text(
-                  '${entry.typeLabel} • ID #${entry.referenceId}',
-                  style: GoogleFonts.inter(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w400,
-                    color: context.appTextSecondary,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 6,
+                  runSpacing: 2,
+                  children: [
+                    Text(
+                      '${entry.typeLabel} • ID #${entry.referenceId}',
+                      style: GoogleFonts.inter(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w400,
+                        color: context.appTextSecondary,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (isPendingSync) const PendingSyncBadge(compact: true),
+                  ],
                 ),
               ],
             ),

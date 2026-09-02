@@ -4,14 +4,21 @@ import 'package:flutter_riverpod/legacy.dart';
 import '../../../../core/errors/failures.dart';
 import '../../domain/entities/product.dart';
 import '../../domain/repositories/product_repository.dart';
-import '../../data/repositories/product_repository_impl.dart';
+import '../../data/repositories/offline_product_repository.dart';
 import '../../../auth/presentation/controllers/auth_controller.dart';
 import '../../../../shared/providers/firebase_providers.dart';
+import '../../../../core/sync/sync_providers.dart';
+import '../../../../core/connectivity/connectivity_service.dart';
 export '../../../../shared/providers/firebase_providers.dart' show currentShopIdProvider;
 
 // ── Repository Provider ──
 final productRepositoryProvider = Provider<ProductRepository>((ref) {
-  return ProductRepositoryImpl();
+  final syncProcessor = ref.watch(syncProcessorProvider);
+  final connectivity = ref.watch(connectivityServiceProvider);
+  return OfflineProductRepository(
+    syncProcessor: syncProcessor,
+    connectivity: connectivity,
+  );
 });
 
 // ── Products Stream ──
