@@ -49,6 +49,18 @@ class OfflineProductRepository implements ProductRepository {
   String _normalizedLookup(String value) =>
       value.replaceAll(RegExp(r'[^A-Za-z0-9]'), '').toLowerCase();
 
+  /// Collects IDs of uncompleted queued operations for an entity to establish deterministic dependency chains.
+  List<String> _findPendingOperationIds(String shopId, String entityId) {
+    if (!_localDb.isInitialized) return const [];
+    return _localDb.syncQueueBox.values
+        .where((i) =>
+            i.shopId == shopId &&
+            i.entityId == entityId &&
+            (i.status == SyncStatus.pending || i.status == SyncStatus.processing))
+        .map((i) => i.localId)
+        .toList();
+  }
+
   // ── Products ──
 
   @override
@@ -220,7 +232,8 @@ class OfflineProductRepository implements ProductRepository {
     // 1. Save immediately to local Hive box
     await _localDb.productsBox.put(product.id, updated);
 
-    // 2. Queue sync operation
+    // 2. Queue sync operation with dependencies on any prior uncompleted operations
+    final priorDeps = _findPendingOperationIds(shopId, product.id);
     final syncItem = SyncQueueItem(
       localId: const Uuid().v4(),
       shopId: shopId,
@@ -231,6 +244,8 @@ class OfflineProductRepository implements ProductRepository {
       payload: ProductModel.fromEntity(updated).toFirestore(),
       createdAt: now,
       updatedAt: now,
+      dependsOnOperationIds: priorDeps,
+      dependsOnOperationId: priorDeps.isNotEmpty ? priorDeps.last : null,
     );
     await _syncProcessor.enqueue(syncItem);
   }
@@ -248,7 +263,8 @@ class OfflineProductRepository implements ProductRepository {
       );
     }
 
-    // 2. Queue sync operation
+    // 2. Queue sync operation with dependencies on prior operations
+    final priorDeps = _findPendingOperationIds(shopId, productId);
     final syncItem = SyncQueueItem(
       localId: const Uuid().v4(),
       shopId: shopId,
@@ -259,6 +275,8 @@ class OfflineProductRepository implements ProductRepository {
       payload: {'isActive': false},
       createdAt: now,
       updatedAt: now,
+      dependsOnOperationIds: priorDeps,
+      dependsOnOperationId: priorDeps.isNotEmpty ? priorDeps.last : null,
     );
     await _syncProcessor.enqueue(syncItem);
   }
@@ -302,6 +320,7 @@ class OfflineProductRepository implements ProductRepository {
     await _localDb.stockMovementsBox.put(movementId, movement);
 
     // Queue sync operation
+    final priorDeps = _findPendingOperationIds(shopId, productId);
     final syncItem = SyncQueueItem(
       localId: const Uuid().v4(),
       shopId: shopId,
@@ -316,6 +335,8 @@ class OfflineProductRepository implements ProductRepository {
       },
       createdAt: now,
       updatedAt: now,
+      dependsOnOperationIds: priorDeps,
+      dependsOnOperationId: priorDeps.isNotEmpty ? priorDeps.last : null,
     );
     await _syncProcessor.enqueue(syncItem);
   }
@@ -359,6 +380,7 @@ class OfflineProductRepository implements ProductRepository {
     await _localDb.stockMovementsBox.put(movementId, movement);
 
     // Queue sync operation
+    final priorDeps = _findPendingOperationIds(shopId, productId);
     final syncItem = SyncQueueItem(
       localId: const Uuid().v4(),
       shopId: shopId,
@@ -373,6 +395,8 @@ class OfflineProductRepository implements ProductRepository {
       },
       createdAt: now,
       updatedAt: now,
+      dependsOnOperationIds: priorDeps,
+      dependsOnOperationId: priorDeps.isNotEmpty ? priorDeps.last : null,
     );
     await _syncProcessor.enqueue(syncItem);
   }
@@ -488,6 +512,7 @@ class OfflineProductRepository implements ProductRepository {
 
     await _localDb.categoriesBox.put(category.id, updated);
 
+    final priorDeps = _findPendingOperationIds(shopId, category.id);
     final syncItem = SyncQueueItem(
       localId: const Uuid().v4(),
       shopId: shopId,
@@ -502,6 +527,8 @@ class OfflineProductRepository implements ProductRepository {
       },
       createdAt: now,
       updatedAt: now,
+      dependsOnOperationIds: priorDeps,
+      dependsOnOperationId: priorDeps.isNotEmpty ? priorDeps.last : null,
     );
     await _syncProcessor.enqueue(syncItem);
   }
@@ -511,6 +538,7 @@ class OfflineProductRepository implements ProductRepository {
     await _localDb.categoriesBox.delete(categoryId);
 
     final now = DateTime.now();
+    final priorDeps = _findPendingOperationIds(shopId, categoryId);
     final syncItem = SyncQueueItem(
       localId: const Uuid().v4(),
       shopId: shopId,
@@ -521,6 +549,8 @@ class OfflineProductRepository implements ProductRepository {
       payload: {},
       createdAt: now,
       updatedAt: now,
+      dependsOnOperationIds: priorDeps,
+      dependsOnOperationId: priorDeps.isNotEmpty ? priorDeps.last : null,
     );
     await _syncProcessor.enqueue(syncItem);
   }

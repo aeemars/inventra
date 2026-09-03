@@ -21,6 +21,10 @@ void main() {
       updatedAt: now,
       status: SyncStatus.pending,
       retryCount: 0,
+      dependsOnOperationIds: const ['parent-op-1', 'parent-op-2'],
+      processingStartedAt: now,
+      conflictCategory: SyncConflictCategory.stockConflict,
+      conflictExplanation: 'Insufficient server stock',
     );
 
     test('serializes to and from Map correctly', () {
@@ -38,6 +42,31 @@ void main() {
       expect(restored.status, SyncStatus.pending);
       expect(restored.retryCount, 0);
       expect(restored.createdAt, now);
+      expect(restored.dependsOnOperationIds, ['parent-op-1', 'parent-op-2']);
+      expect(restored.conflictCategory, SyncConflictCategory.stockConflict);
+      expect(restored.conflictExplanation, 'Insufficient server stock');
+      expect(restored.processingStartedAt, now);
+    });
+
+    test('allDependencies merges legacy dependsOnOperationId and dependsOnOperationIds', () {
+      final itemWithBoth = SyncQueueItem(
+        localId: 'op-child',
+        shopId: 'shop-abc',
+        userId: 'user-1',
+        operationType: SyncOperationType.createSale,
+        entityType: 'sale',
+        payload: const {},
+        createdAt: now,
+        updatedAt: now,
+        dependsOnOperationId: 'legacy-dep',
+        dependsOnOperationIds: const ['dep-1', 'dep-2'],
+      );
+
+      final allDeps = itemWithBoth.allDependencies;
+      expect(allDeps, contains('legacy-dep'));
+      expect(allDeps, contains('dep-1'));
+      expect(allDeps, contains('dep-2'));
+      expect(allDeps.length, 3);
     });
 
     test('copyWith updates fields without mutating original', () {
@@ -51,49 +80,6 @@ void main() {
       expect(processing.retryCount, 1);
       expect(processing.lastError, 'Temporary network failure');
       expect(testItem.status, SyncStatus.pending); // original intact
-    });
-
-    test('dependency-aware queue sorting prioritizes parent operations', () {
-      final productCreate = SyncQueueItem(
-        localId: 'op-create-prod',
-        shopId: 'shop-abc',
-        userId: 'user-xyz',
-        operationType: SyncOperationType.createProduct,
-        entityType: 'product',
-        entityId: 'prod-1',
-        payload: {'name': 'Product 1'},
-        createdAt: now,
-        updatedAt: now,
-      );
-
-      final productSale = SyncQueueItem(
-        localId: 'op-sale-prod',
-        shopId: 'shop-abc',
-        userId: 'user-xyz',
-        operationType: SyncOperationType.createSale,
-        entityType: 'sale',
-        entityId: 'tx-1',
-        dependsOnOperationId: 'op-create-prod',
-        payload: {'items': []},
-        createdAt: now.add(const Duration(seconds: 10)),
-        updatedAt: now.add(const Duration(seconds: 10)),
-      );
-
-      // Unordered list
-      final queue = [productSale, productCreate];
-
-      queue.sort((a, b) {
-        if (a.dependsOnOperationId != null && a.dependsOnOperationId == b.localId) {
-          return 1;
-        }
-        if (b.dependsOnOperationId != null && b.dependsOnOperationId == a.localId) {
-          return -1;
-        }
-        return a.createdAt.compareTo(b.createdAt);
-      });
-
-      expect(queue.first.localId, 'op-create-prod');
-      expect(queue.last.localId, 'op-sale-prod');
     });
 
     test('idempotency key is preserved across retries', () {
@@ -111,14 +97,16 @@ void main() {
       expect(retry2.retryCount, 2);
     });
 
-    test('conflict status can be recorded with error description', () {
+    test('conflict status can be recorded with error description and category', () {
       final conflict = testItem.copyWith(
         status: SyncStatus.conflict,
-        lastError: 'failed-precondition: Insufficient stock on server',
+        conflictCategory: SyncConflictCategory.stockConflict,
+        conflictExplanation: 'Insufficient stock on server for requested transaction',
       );
 
       expect(conflict.status, SyncStatus.conflict);
-      expect(conflict.lastError, contains('Insufficient stock'));
+      expect(conflict.conflictCategory, SyncConflictCategory.stockConflict);
+      expect(conflict.conflictExplanation, contains('Insufficient stock'));
     });
   });
 }

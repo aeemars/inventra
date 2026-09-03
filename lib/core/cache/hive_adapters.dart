@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:hive_ce/hive_ce.dart';
 import '../../features/inventory/domain/entities/product.dart';
 import '../../features/inventory/domain/entities/category.dart';
@@ -19,6 +20,7 @@ import '../sync/sync_models.dart';
 // ScanHistoryEntry = 7
 // SalesQueueItem   = 8
 // SyncQueueItem    = 9
+// Timestamp        = 10
 
 /// Register all Hive type adapters for offline caching
 void registerHiveAdapters() {
@@ -32,6 +34,7 @@ void registerHiveAdapters() {
   Hive.registerAdapter(ScanHistoryEntryAdapter());
   Hive.registerAdapter(SalesQueueItemAdapter());
   Hive.registerAdapter(SyncQueueItemAdapter());
+  Hive.registerAdapter(TimestampAdapter());
 }
 
 // ═══════════════════════════════════════════
@@ -454,6 +457,27 @@ class SyncQueueItemAdapter extends TypeAdapter<SyncQueueItem> {
   @override
   void write(BinaryWriter writer, SyncQueueItem obj) {
     writer.writeMap(obj.toMap());
+  }
+}
+
+// ═══════════════════════════════════════════
+// Timestamp Adapter (TypeId: 10)
+// ═══════════════════════════════════════════
+class TimestampAdapter extends TypeAdapter<Timestamp> {
+  @override
+  final int typeId = 10;
+
+  @override
+  Timestamp read(BinaryReader reader) {
+    final seconds = reader.readInt();
+    final nanoseconds = reader.readInt();
+    return Timestamp(seconds, nanoseconds);
+  }
+
+  @override
+  void write(BinaryWriter writer, Timestamp obj) {
+    writer.writeInt(obj.seconds);
+    writer.writeInt(obj.nanoseconds);
   }
 }
 

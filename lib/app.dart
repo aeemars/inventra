@@ -8,6 +8,7 @@ import 'core/theme/app_theme.dart';
 import 'core/theme/theme_provider.dart';
 import 'features/auth/presentation/controllers/auth_controller.dart';
 import 'shared/providers/firebase_providers.dart';
+import 'core/sync/sync_providers.dart';
 
 class InventraApp extends ConsumerWidget {
   const InventraApp({super.key});
@@ -16,6 +17,7 @@ class InventraApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     ref.watch(stockAlertProvider); // keeps the low-stock listener alive
     ref.watch(taxThresholdProvider); // keeps the tax threshold listener alive
+    ref.watch(syncProcessorProvider); // keeps app-level sync engine alive
 
     // Register FCM token when shop ID becomes available
     ref.listen<String?>(currentShopIdProvider, (previous, shopId) {

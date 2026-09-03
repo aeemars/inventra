@@ -31,6 +31,20 @@ class ScannerRepository {
   FirebaseFirestore get _firestoreInstance =>
       _firestore ?? FirebaseFirestore.instance;
 
+  /// Finds uncompleted queued operations for the specified entity IDs to ensure dependent operations wait.
+  List<String> _findPendingDependencies(String shopId, Iterable<String> entityIds) {
+    if (!_localDb.isInitialized) return const [];
+    final idSet = entityIds.toSet();
+    return _localDb.syncQueueBox.values
+        .where((i) =>
+            i.shopId == shopId &&
+            i.entityId != null &&
+            idSet.contains(i.entityId) &&
+            (i.status == SyncStatus.pending || i.status == SyncStatus.processing))
+        .map((i) => i.localId)
+        .toList();
+  }
+
   StreamSubscription? _remoteScanHistorySub;
   String? _listeningShopId;
 
@@ -62,6 +76,9 @@ class ScannerRepository {
     await _localDb.scanHistoryBox.put(entryId, updatedEntry);
 
     // 2. Queue for remote sync
+    final priorDeps = entry.matchedProductId != null
+        ? _findPendingDependencies(shopId, [entry.matchedProductId!])
+        : const <String>[];
     final syncItem = SyncQueueItem(
       localId: const Uuid().v4(),
       shopId: shopId,
@@ -72,6 +89,8 @@ class ScannerRepository {
       payload: updatedEntry.toFirestore(),
       createdAt: DateTime.now(),
       updatedAt: DateTime.now(),
+      dependsOnOperationIds: priorDeps,
+      dependsOnOperationId: priorDeps.isNotEmpty ? priorDeps.last : null,
     );
 
     if (_syncProcessor != null) {
@@ -247,6 +266,8 @@ class ScannerRepository {
     await _localDb.salesTransactionsBox.put(txId, transaction);
 
     // 4. Enqueue idempotent createSale sync operation
+    final productIds = items.map((i) => i['productId'] as String).toList();
+    final priorDeps = _findPendingDependencies(shopId, productIds);
     final syncItem = SyncQueueItem(
       localId: txId, // Stable operationId
       shopId: shopId,
@@ -262,6 +283,8 @@ class ScannerRepository {
       },
       createdAt: now,
       updatedAt: now,
+      dependsOnOperationIds: priorDeps,
+      dependsOnOperationId: priorDeps.isNotEmpty ? priorDeps.last : null,
     );
 
     if (_syncProcessor != null) {
@@ -314,6 +337,7 @@ class ScannerRepository {
     );
     await _localDb.stockMovementsBox.put(movementId, movement);
 
+    final priorDeps = _findPendingDependencies(shopId, [productId]);
     final syncItem = SyncQueueItem(
       localId: const Uuid().v4(),
       shopId: shopId,
@@ -328,6 +352,8 @@ class ScannerRepository {
       },
       createdAt: now,
       updatedAt: now,
+      dependsOnOperationIds: priorDeps,
+      dependsOnOperationId: priorDeps.isNotEmpty ? priorDeps.last : null,
     );
 
     if (_syncProcessor != null) {
@@ -377,6 +403,7 @@ class ScannerRepository {
     );
     await _localDb.stockMovementsBox.put(movementId, movement);
 
+    final priorDeps = _findPendingDependencies(shopId, [productId]);
     final syncItem = SyncQueueItem(
       localId: const Uuid().v4(),
       shopId: shopId,
@@ -391,6 +418,8 @@ class ScannerRepository {
       },
       createdAt: now,
       updatedAt: now,
+      dependsOnOperationIds: priorDeps,
+      dependsOnOperationId: priorDeps.isNotEmpty ? priorDeps.last : null,
     );
 
     if (_syncProcessor != null) {

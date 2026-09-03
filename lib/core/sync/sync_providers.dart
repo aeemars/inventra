@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../shared/providers/firebase_providers.dart';
 import '../cache/local_database.dart';
 import '../connectivity/connectivity_service.dart';
 import 'sync_models.dart';
@@ -6,11 +7,18 @@ import 'sync_processor.dart';
 
 final syncProcessorProvider = Provider<SyncProcessor>((ref) {
   final connectivity = ref.watch(connectivityServiceProvider);
+  final currentShopId = ref.watch(currentShopIdProvider);
   final processor = SyncProcessor(
     localDb: LocalDatabase.instance,
     connectivity: connectivity,
+    initialShopId: currentShopId,
   );
   processor.initialize();
+
+  ref.listen<String?>(currentShopIdProvider, (previous, next) {
+    processor.setActiveShop(next);
+  });
+
   ref.onDispose(() => processor.dispose());
   return processor;
 });
@@ -47,6 +55,16 @@ final pendingSyncCountProvider = Provider<int>((ref) {
             i.status == SyncStatus.processing ||
             i.status == SyncStatus.conflict)
         .length,
+    loading: () => 0,
+    error: (_, __) => 0,
+  );
+});
+
+final conflictSyncCountProvider = Provider<int>((ref) {
+  final itemsAsync = ref.watch(syncQueueItemsProvider);
+  return itemsAsync.when(
+    data: (items) =>
+        items.where((i) => i.status == SyncStatus.conflict).length,
     loading: () => 0,
     error: (_, __) => 0,
   );
