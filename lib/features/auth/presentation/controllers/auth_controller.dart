@@ -8,6 +8,8 @@ import '../../domain/repositories/auth_repository.dart';
 import '../../data/repositories/auth_repository_impl.dart';
 import '../../../../core/errors/failures.dart';
 import '../../../../core/notifications/fcm_service.dart';
+import '../../../../core/cache/local_database.dart';
+import '../../../../core/sync/sync_providers.dart';
 import '../../../../shared/providers/firebase_providers.dart';
 
 // ── Repository Provider ──
@@ -139,6 +141,8 @@ class AuthController extends StateNotifier<AuthState> {
     final shopId = ref.read(currentShopIdProvider);
     if (shopId != null) {
       await FcmService.unregister(shopId);
+      ref.read(syncProcessorProvider).setActiveShop(null);
+      await LocalDatabase.instance.clearShopData(shopId: shopId, force: false);
     }
     await _repository.signOut();
     state = AuthState.initial;

@@ -24,6 +24,7 @@ class ProductModel {
   final DateTime updatedAt;
   final String createdBy;
   final String updatedBy;
+  final String shopId;
 
   const ProductModel({
     required this.id,
@@ -47,11 +48,18 @@ class ProductModel {
     required this.updatedAt,
     required this.createdBy,
     required this.updatedBy,
+    this.shopId = '',
   });
 
   factory ProductModel.fromFirestore(
-      DocumentSnapshot<Map<String, dynamic>> doc) {
+      DocumentSnapshot<Map<String, dynamic>> doc, [String? explicitShopId]) {
     final data = doc.data()!;
+    final resolvedShopId = explicitShopId ??
+        data['shopId'] as String? ??
+        (doc.reference.parent.parent != null
+            ? doc.reference.parent.parent!.id
+            : '');
+
     return ProductModel(
       id: doc.id,
       name: data['name'] as String? ?? '',
@@ -77,6 +85,7 @@ class ProductModel {
       updatedAt: (data['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       createdBy: data['createdBy'] as String? ?? '',
       updatedBy: data['updatedBy'] as String? ?? '',
+      shopId: resolvedShopId,
     );
   }
 
@@ -102,10 +111,11 @@ class ProductModel {
       'updatedAt': Timestamp.fromDate(updatedAt),
       'createdBy': createdBy,
       'updatedBy': updatedBy,
+      if (shopId.isNotEmpty) 'shopId': shopId,
     };
   }
 
-  Product toEntity() {
+  Product toEntity([String? overrideShopId]) {
     return Product(
       id: id,
       name: name,
@@ -128,6 +138,7 @@ class ProductModel {
       updatedAt: updatedAt,
       createdBy: createdBy,
       updatedBy: updatedBy,
+      shopId: overrideShopId ?? shopId,
     );
   }
 
@@ -156,6 +167,7 @@ class ProductModel {
       updatedAt: product.updatedAt,
       createdBy: product.createdBy,
       updatedBy: product.updatedBy,
+      shopId: product.shopId,
     );
   }
 }

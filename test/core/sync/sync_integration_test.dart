@@ -14,6 +14,7 @@ import 'package:inventra/core/sync/sync_processor.dart';
 import 'package:inventra/features/inventory/data/repositories/offline_product_repository.dart';
 import 'package:inventra/features/inventory/domain/entities/product.dart';
 import 'package:inventra/features/scanner/data/scanner_repository.dart';
+import 'package:inventra/shared/models/stock_movement.dart';
 
 // ── Mocktail Definitions ──
 // ignore: subtype_of_sealed_class
@@ -475,7 +476,7 @@ void main() {
 
       // Local stock decreased to 17
       expect(localDb.productsBox.get('prod-D')?.quantity, 17);
-      expect(localDb.salesTransactionsBox.get(txId)?.status, 'completed');
+      expect(localDb.salesTransactionsBox.get(txId)?.status, TransactionStatus.completedLocal);
 
       connectivity.setOnline(true);
       await processor.processQueue();
@@ -484,6 +485,7 @@ void main() {
       expect(fakeBackend.executionOrder, ['prod-D', txId]);
       expect(fakeBackend.transactions[txId], isNotNull);
       expect(localDb.syncQueueBox.isEmpty, isTrue);
+      expect(localDb.salesTransactionsBox.get(txId)?.status, TransactionStatus.synced);
     });
 
     // ═══════════════════════════════════════════

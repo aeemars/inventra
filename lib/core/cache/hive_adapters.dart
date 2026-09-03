@@ -8,19 +8,22 @@ import '../../shared/models/shop_settings_model.dart';
 import '../../shared/models/scan_history_entry.dart';
 import '../../features/sales/domain/sales_queue_item.dart';
 import '../sync/sync_models.dart';
+import '../sync/operation_journal.dart';
 
-// ── Type IDs ──
-// Product          = 0
-// Category         = 1
-// SaleTransaction  = 2
-// SaleItem         = 3
-// StockMovement    = 4
-// AppNotification  = 5
-// ShopSettings     = 6
-// ScanHistoryEntry = 7
-// SalesQueueItem   = 8
-// SyncQueueItem    = 9
-// Timestamp        = 10
+// Hive TypeId Registry
+// ═════════════════════
+// Product           = 0
+// Category          = 1
+// SaleTransaction   = 2
+// SaleItem          = 3
+// StockMovement     = 4
+// AppNotification   = 5
+// ShopSettings      = 6
+// ScanHistoryEntry  = 7
+// SalesQueueItem    = 8
+// SyncQueueItem     = 9
+// Timestamp         = 10
+// OperationJournal  = 11
 
 /// Register all Hive type adapters for offline caching
 void registerHiveAdapters() {
@@ -35,6 +38,7 @@ void registerHiveAdapters() {
   Hive.registerAdapter(SalesQueueItemAdapter());
   Hive.registerAdapter(SyncQueueItemAdapter());
   Hive.registerAdapter(TimestampAdapter());
+  Hive.registerAdapter(OperationJournalEntryAdapter());
 }
 
 // ═══════════════════════════════════════════
@@ -73,12 +77,13 @@ class ProductAdapter extends TypeAdapter<Product> {
       updatedAt: fields[18] as DateTime,
       createdBy: fields[19] as String,
       updatedBy: fields[20] as String,
+      shopId: fields[21] as String? ?? '',
     );
   }
 
   @override
   void write(BinaryWriter writer, Product obj) {
-    writer.writeByte(21); // number of fields
+    writer.writeByte(22); // number of fields
     writer
       ..writeByte(0)..write(obj.id)
       ..writeByte(1)..write(obj.name)
@@ -100,7 +105,8 @@ class ProductAdapter extends TypeAdapter<Product> {
       ..writeByte(17)..write(obj.createdAt)
       ..writeByte(18)..write(obj.updatedAt)
       ..writeByte(19)..write(obj.createdBy)
-      ..writeByte(20)..write(obj.updatedBy);
+      ..writeByte(20)..write(obj.updatedBy)
+      ..writeByte(21)..write(obj.shopId);
   }
 }
 
@@ -125,19 +131,21 @@ class CategoryAdapter extends TypeAdapter<Category> {
       productCount: fields[3] as int? ?? 0,
       createdAt: fields[4] as DateTime,
       updatedAt: fields[5] as DateTime,
+      shopId: fields[6] as String? ?? '',
     );
   }
 
   @override
   void write(BinaryWriter writer, Category obj) {
-    writer.writeByte(6);
+    writer.writeByte(7);
     writer
       ..writeByte(0)..write(obj.id)
       ..writeByte(1)..write(obj.name)
       ..writeByte(2)..write(obj.description)
       ..writeByte(3)..write(obj.productCount)
       ..writeByte(4)..write(obj.createdAt)
-      ..writeByte(5)..write(obj.updatedAt);
+      ..writeByte(5)..write(obj.updatedAt)
+      ..writeByte(6)..write(obj.shopId);
   }
 }
 
@@ -170,12 +178,17 @@ class SaleTransactionAdapter extends TypeAdapter<SaleTransaction> {
       createdByName: fields[11] as String,
       createdAt: fields[12] as DateTime,
       serverTransactionId: fields[13] as String?,
+      shopId: fields[14] as String? ?? '',
+      operationId: fields[15] as String?,
+      syncedAt: fields[16] as DateTime?,
+      lastSyncAttemptAt: fields[17] as DateTime?,
+      syncError: fields[18] as String?,
     );
   }
 
   @override
   void write(BinaryWriter writer, SaleTransaction obj) {
-    writer.writeByte(14);
+    writer.writeByte(19);
     writer
       ..writeByte(0)..write(obj.id)
       ..writeByte(1)..write(obj.type)
@@ -190,7 +203,12 @@ class SaleTransactionAdapter extends TypeAdapter<SaleTransaction> {
       ..writeByte(10)..write(obj.createdBy)
       ..writeByte(11)..write(obj.createdByName)
       ..writeByte(12)..write(obj.createdAt)
-      ..writeByte(13)..write(obj.serverTransactionId);
+      ..writeByte(13)..write(obj.serverTransactionId)
+      ..writeByte(14)..write(obj.shopId)
+      ..writeByte(15)..write(obj.operationId)
+      ..writeByte(16)..write(obj.syncedAt)
+      ..writeByte(17)..write(obj.lastSyncAttemptAt)
+      ..writeByte(18)..write(obj.syncError);
   }
 }
 
@@ -259,12 +277,13 @@ class StockMovementAdapter extends TypeAdapter<StockMovement> {
       userName: fields[10] as String,
       source: fields[11] as String,
       createdAt: fields[12] as DateTime,
+      shopId: fields[13] as String? ?? '',
     );
   }
 
   @override
   void write(BinaryWriter writer, StockMovement obj) {
-    writer.writeByte(13);
+    writer.writeByte(14);
     writer
       ..writeByte(0)..write(obj.id)
       ..writeByte(1)..write(obj.productId)
@@ -278,7 +297,8 @@ class StockMovementAdapter extends TypeAdapter<StockMovement> {
       ..writeByte(9)..write(obj.userId)
       ..writeByte(10)..write(obj.userName)
       ..writeByte(11)..write(obj.source)
-      ..writeByte(12)..write(obj.createdAt);
+      ..writeByte(12)..write(obj.createdAt)
+      ..writeByte(13)..write(obj.shopId);
   }
 }
 
@@ -395,12 +415,13 @@ class ScanHistoryEntryAdapter extends TypeAdapter<ScanHistoryEntry> {
       scannedBy: fields[6] as String? ?? '',
       scannedByName: fields[7] as String? ?? '',
       timestamp: fields[8] as DateTime? ?? DateTime.now(),
+      shopId: fields[9] as String? ?? '',
     );
   }
 
   @override
   void write(BinaryWriter writer, ScanHistoryEntry obj) {
-    writer.writeByte(9);
+    writer.writeByte(10);
     writer
       ..writeByte(0)..write(obj.id)
       ..writeByte(1)..write(obj.barcodeValue)

@@ -166,6 +166,20 @@ class _SaleScreenState extends ConsumerState<SaleScreen> {
                 ],
               ),
               const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Status',
+                    style: AppTypography.bodySmall.copyWith(color: ctx.appTextSecondary),
+                  ),
+                  const PendingSyncBadge(
+                    label: 'Offline • Completed Locally',
+                    compact: true,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
               Text(
                 'Date: ${Formatters.date(DateTime.now())}',
                 style: AppTypography.bodySmall.copyWith(color: ctx.appTextTertiary),

@@ -16,6 +16,7 @@ class StockMovementModel {
   final String userName;
   final String source;
   final DateTime createdAt;
+  final String shopId;
 
   const StockMovementModel({
     required this.id,
@@ -31,11 +32,17 @@ class StockMovementModel {
     required this.userName,
     required this.source,
     required this.createdAt,
+    this.shopId = '',
   });
 
   factory StockMovementModel.fromFirestore(
-      DocumentSnapshot<Map<String, dynamic>> doc) {
+      DocumentSnapshot<Map<String, dynamic>> doc, [String? explicitShopId]) {
     final d = doc.data()!;
+    final resolvedShopId = explicitShopId ??
+        d['shopId'] as String? ??
+        (doc.reference.parent.parent != null
+            ? doc.reference.parent.parent!.id
+            : '');
     return StockMovementModel(
       id: doc.id,
       productId: d['productId'] as String? ?? '',
@@ -51,6 +58,7 @@ class StockMovementModel {
       source: d['source'] as String? ?? 'manual',
       createdAt:
           (d['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      shopId: resolvedShopId,
     );
   }
 
@@ -68,10 +76,11 @@ class StockMovementModel {
       'userName': userName,
       'source': source,
       'createdAt': FieldValue.serverTimestamp(),
+      if (shopId.isNotEmpty) 'shopId': shopId,
     };
   }
 
-  StockMovement toEntity() {
+  StockMovement toEntity([String? overrideShopId]) {
     return StockMovement(
       id: id,
       productId: productId,
@@ -86,6 +95,7 @@ class StockMovementModel {
       userName: userName,
       source: source,
       createdAt: createdAt,
+      shopId: overrideShopId ?? shopId,
     );
   }
 
@@ -104,6 +114,7 @@ class StockMovementModel {
       userName: movement.userName,
       source: movement.source,
       createdAt: movement.createdAt,
+      shopId: movement.shopId,
     );
   }
 }

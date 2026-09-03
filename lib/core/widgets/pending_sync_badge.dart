@@ -1,33 +1,66 @@
 import 'package:flutter/material.dart';
 import '../extensions/theme_ext.dart';
 
-/// A sleek, overflow-proof badge indicating a local item is pending synchronization.
+/// A sleek, overflow-proof badge indicating item synchronization status.
 /// Designed to adapt seamlessly to both dark and light modes.
 class PendingSyncBadge extends StatelessWidget {
   final String label;
   final bool compact;
+  final Color? customColor;
+  final IconData? customIcon;
 
   const PendingSyncBadge({
     super.key,
     this.label = 'Pending Sync',
     this.compact = false,
+    this.customColor,
+    this.customIcon,
   });
+
+  const PendingSyncBadge.synced({
+    super.key,
+    this.label = 'Synced',
+    this.compact = false,
+  })  : customColor = const Color(0xFF16A34A),
+        customIcon = Icons.check_circle_outline;
+
+  const PendingSyncBadge.syncing({
+    super.key,
+    this.label = 'Syncing...',
+    this.compact = false,
+  })  : customColor = const Color(0xFF2563EB),
+        customIcon = Icons.sync_rounded;
+
+  const PendingSyncBadge.conflict({
+    super.key,
+    this.label = 'Conflict',
+    this.compact = false,
+  })  : customColor = const Color(0xFFDC2626),
+        customIcon = Icons.warning_amber_rounded;
+
+  const PendingSyncBadge.failed({
+    super.key,
+    this.label = 'Sync Failed',
+    this.compact = false,
+  })  : customColor = const Color(0xFFEA580C),
+        customIcon = Icons.error_outline;
 
   @override
   Widget build(BuildContext context) {
     final isDark = context.isDark;
 
+    final baseColor = customColor ??
+        (isDark ? const Color(0xFFFFB74D) : const Color(0xFFE65100));
+
     final bgColor = isDark
-        ? const Color(0xFF2E1C07)
-        : const Color(0xFFFFF3E0);
+        ? baseColor.withValues(alpha: 0.18)
+        : baseColor.withValues(alpha: 0.12);
 
     final borderColor = isDark
-        ? const Color(0x66FFA726)
-        : const Color(0xFFFFB74D);
+        ? baseColor.withValues(alpha: 0.4)
+        : baseColor.withValues(alpha: 0.35);
 
-    final fgColor = isDark
-        ? const Color(0xFFFFB74D)
-        : const Color(0xFFE65100);
+    final fgColor = baseColor;
 
     return Container(
       padding: EdgeInsets.symmetric(
@@ -44,7 +77,7 @@ class PendingSyncBadge extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Icon(
-            Icons.cloud_upload_outlined,
+            customIcon ?? Icons.cloud_upload_outlined,
             size: compact ? 9.5 : 11,
             color: fgColor,
           ),

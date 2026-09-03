@@ -8,6 +8,7 @@ class Category extends Equatable {
   final int productCount;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final String shopId;
 
   const Category({
     required this.id,
@@ -16,6 +17,7 @@ class Category extends Equatable {
     this.productCount = 0,
     required this.createdAt,
     required this.updatedAt,
+    this.shopId = '',
   });
 
   Category copyWith({
@@ -25,6 +27,7 @@ class Category extends Equatable {
     int? productCount,
     DateTime? createdAt,
     DateTime? updatedAt,
+    String? shopId,
   }) {
     return Category(
       id: id ?? this.id,
@@ -33,9 +36,10 @@ class Category extends Equatable {
       productCount: productCount ?? this.productCount,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      shopId: shopId ?? this.shopId,
     );
   }
 
   @override
-  List<Object?> get props => [id, name];
+  List<Object?> get props => [id, name, shopId];
 }

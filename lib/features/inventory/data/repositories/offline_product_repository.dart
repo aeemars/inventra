@@ -67,16 +67,14 @@ class OfflineProductRepository implements ProductRepository {
   Stream<List<Product>> watchProducts(String shopId) {
     _attachRemoteListeners(shopId);
 
-    // Stream from local Hive box
+    // Stream from local Hive box scoped strictly to active shop
     return Stream<List<Product>>.multi((controller) {
       void emitLocal() {
         if (!_localDb.isInitialized) {
           controller.add([]);
           return;
         }
-        final list = _localDb.productsBox.values
-            .where((p) => p.isActive)
-            .toList();
+        final list = _localDb.getProducts(shopId, activeOnly: true);
         list.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
         controller.add(list);
       }
@@ -92,63 +90,75 @@ class OfflineProductRepository implements ProductRepository {
     _listeningShopId = shopId;
 
     _remoteProductsSub?.cancel();
-    _remoteProductsSub = _firestoreInstance
-        .collection(FirestorePaths.products(shopId))
-        .snapshots()
-        .listen((snapshot) async {
-      final pendingProductOps = _localDb.syncQueueBox.values
-          .where((i) => i.shopId == shopId && i.entityType == 'product')
-          .map((i) => i.entityId)
-          .toSet();
+    try {
+      _remoteProductsSub = _firestoreInstance
+          .collection(FirestorePaths.products(shopId))
+          .snapshots()
+          .listen((snapshot) async {
+        final pendingProductOps = _localDb.syncQueueBox.values
+            .where((i) => i.shopId == shopId && i.entityType == 'product')
+            .map((i) => i.entityId)
+            .toSet();
 
-      for (final change in snapshot.docChanges) {
-        final docId = change.doc.id;
-        // Do not overwrite local changes if an operation is pending in queue
-        if (pendingProductOps.contains(docId)) continue;
+        for (final change in snapshot.docChanges) {
+          final docId = change.doc.id;
+          // Do not overwrite local changes if an operation is pending in queue
+          if (pendingProductOps.contains(docId)) continue;
 
-        if (change.type == DocumentChangeType.removed) {
-          await _localDb.productsBox.delete(docId);
-        } else {
-          final product = ProductModel.fromFirestore(change.doc).toEntity();
-          await _localDb.productsBox.put(docId, product);
-        }
-      }
-    }, onError: (e) {
-      debugPrint('⚠️ Remote products listener warning (offline): $e');
-    });
-
-    _remoteCategoriesSub?.cancel();
-    _remoteCategoriesSub = _firestoreInstance
-        .collection(FirestorePaths.categories(shopId))
-        .snapshots()
-        .listen((snapshot) async {
-      for (final change in snapshot.docChanges) {
-        final docId = change.doc.id;
-        if (change.type == DocumentChangeType.removed) {
-          await _localDb.categoriesBox.delete(docId);
-        } else {
-          final data = change.doc.data();
-          if (data != null) {
-            final category = Category(
-              id: docId,
-              name: data['name'] as String? ?? '',
-              description: data['description'] as String?,
-              productCount: (data['productCount'] as num?)?.toInt() ?? 0,
-              createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
-              updatedAt: (data['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
-            );
-            await _localDb.categoriesBox.put(docId, category);
+          if (change.type == DocumentChangeType.removed) {
+            await _localDb.deleteProduct(shopId, docId);
+          } else {
+            final product =
+                ProductModel.fromFirestore(change.doc, shopId).toEntity(shopId);
+            await _localDb.putProduct(shopId, product);
           }
         }
-      }
-    }, onError: (e) {
-      debugPrint('⚠️ Remote categories listener warning (offline): $e');
-    });
+      }, onError: (e) {
+        debugPrint('⚠️ Remote products listener warning (offline): $e');
+      });
+    } catch (e) {
+      debugPrint('⚠️ [OFFLINE REPO] Could not attach products remote listener: $e');
+    }
+
+    _remoteCategoriesSub?.cancel();
+    try {
+      _remoteCategoriesSub = _firestoreInstance
+          .collection(FirestorePaths.categories(shopId))
+          .snapshots()
+          .listen((snapshot) async {
+        for (final change in snapshot.docChanges) {
+          final docId = change.doc.id;
+          if (change.type == DocumentChangeType.removed) {
+            await _localDb.deleteCategory(shopId, docId);
+          } else {
+            final data = change.doc.data();
+            if (data != null) {
+              final category = Category(
+                id: docId,
+                name: data['name'] as String? ?? '',
+                description: data['description'] as String?,
+                productCount: (data['productCount'] as num?)?.toInt() ?? 0,
+                createdAt:
+                    (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+                updatedAt:
+                    (data['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+                shopId: shopId,
+              );
+              await _localDb.putCategory(shopId, category);
+            }
+          }
+        }
+      }, onError: (e) {
+        debugPrint('⚠️ Remote categories listener warning (offline): $e');
+      });
+    } catch (e) {
+      debugPrint('⚠️ [OFFLINE REPO] Could not attach categories remote listener: $e');
+    }
   }
 
   @override
   Future<Product?> getProduct(String shopId, String productId) async {
-    return _localDb.productsBox.get(productId);
+    return _localDb.getProduct(shopId, productId);
   }
 
   @override
@@ -164,7 +174,8 @@ class OfflineProductRepository implements ProductRepository {
       candidates.add('0$cleaned');
     }
 
-    final allProducts = _localDb.productsBox.values.where((p) => p.isActive);
+    final allProducts = _localDb.productsBox.values.where(
+        (p) => (p.shopId == shopId || p.shopId.isEmpty) && p.isActive);
 
     // 1. Exact match on barcode or sku
     for (final candidate in candidates) {
@@ -184,7 +195,8 @@ class OfflineProductRepository implements ProductRepository {
       final normalizedBarcode =
           p.barcode == null ? '' : _normalizedLookup(p.barcode!);
       if (normalizedInput == normalizedSku ||
-          (normalizedBarcode.isNotEmpty && normalizedInput == normalizedBarcode)) {
+          (normalizedBarcode.isNotEmpty &&
+              normalizedInput == normalizedBarcode)) {
         return p;
       }
     }
@@ -200,12 +212,13 @@ class OfflineProductRepository implements ProductRepository {
 
     final newProduct = product.copyWith(
       id: id,
+      shopId: shopId,
       createdAt: product.createdAt,
       updatedAt: now,
     );
 
-    // 1. Save immediately to local Hive box
-    await _localDb.productsBox.put(id, newProduct);
+    // 1. Save immediately to local Hive box with tenant isolation
+    await _localDb.putProduct(shopId, newProduct);
 
     // 2. Queue sync operation
     final syncItem = SyncQueueItem(
@@ -227,10 +240,10 @@ class OfflineProductRepository implements ProductRepository {
   @override
   Future<void> updateProduct(String shopId, Product product) async {
     final now = DateTime.now();
-    final updated = product.copyWith(updatedAt: now);
+    final updated = product.copyWith(shopId: shopId, updatedAt: now);
 
-    // 1. Save immediately to local Hive box
-    await _localDb.productsBox.put(product.id, updated);
+    // 1. Save immediately to local Hive box with tenant isolation
+    await _localDb.putProduct(shopId, updated);
 
     // 2. Queue sync operation with dependencies on any prior uncompleted operations
     final priorDeps = _findPendingOperationIds(shopId, product.id);
@@ -252,13 +265,13 @@ class OfflineProductRepository implements ProductRepository {
 
   @override
   Future<void> deleteProduct(String shopId, String productId) async {
-    final existing = _localDb.productsBox.get(productId);
+    final existing = _localDb.getProduct(shopId, productId);
     final now = DateTime.now();
 
-    // 1. Soft delete in local Hive box
+    // 1. Soft delete in local Hive box with tenant isolation
     if (existing != null) {
-      await _localDb.productsBox.put(
-        productId,
+      await _localDb.putProduct(
+        shopId,
         existing.copyWith(isActive: false, updatedAt: now),
       );
     }
@@ -284,7 +297,7 @@ class OfflineProductRepository implements ProductRepository {
   @override
   Future<void> updateStock(
       String shopId, String productId, int quantityChange) async {
-    final product = _localDb.productsBox.get(productId);
+    final product = _localDb.getProduct(shopId, productId);
     if (product == null) {
       throw InventoryFailure.productNotFound();
     }
@@ -299,7 +312,7 @@ class OfflineProductRepository implements ProductRepository {
       quantity: newQty,
       updatedAt: now,
     );
-    await _localDb.productsBox.put(productId, updatedProduct);
+    await _localDb.putProduct(shopId, updatedProduct);
 
     // Record local stock movement
     final movementId = const Uuid().v4();
@@ -316,8 +329,9 @@ class OfflineProductRepository implements ProductRepository {
       userName: 'Local User',
       source: 'manual',
       createdAt: now,
+      shopId: shopId,
     );
-    await _localDb.stockMovementsBox.put(movementId, movement);
+    await _localDb.putStockMovement(shopId, movement);
 
     // Queue sync operation
     final priorDeps = _findPendingOperationIds(shopId, productId);
@@ -349,14 +363,14 @@ class OfflineProductRepository implements ProductRepository {
     required int quantity,
     required String userId,
   }) async {
-    final product = _localDb.productsBox.get(productId);
+    final product = _localDb.getProduct(shopId, productId);
     final currentQty = product?.quantity ?? 0;
     final newQty = currentQty + quantity;
     final now = DateTime.now();
 
     if (product != null) {
-      await _localDb.productsBox.put(
-        productId,
+      await _localDb.putProduct(
+        shopId,
         product.copyWith(quantity: newQty, updatedAt: now),
       );
     }
@@ -376,8 +390,9 @@ class OfflineProductRepository implements ProductRepository {
       userName: 'User',
       source: 'restock',
       createdAt: now,
+      shopId: shopId,
     );
-    await _localDb.stockMovementsBox.put(movementId, movement);
+    await _localDb.putStockMovement(shopId, movement);
 
     // Queue sync operation
     final priorDeps = _findPendingOperationIds(shopId, productId);
@@ -406,6 +421,7 @@ class OfflineProductRepository implements ProductRepository {
     final lowerQuery = query.toLowerCase();
     return _localDb.productsBox.values
         .where((p) =>
+            (p.shopId == shopId || p.shopId.isEmpty) &&
             p.isActive &&
             (p.name.toLowerCase().contains(lowerQuery) ||
                 p.sku.toLowerCase().contains(lowerQuery) ||
@@ -438,18 +454,17 @@ class OfflineProductRepository implements ProductRepository {
     // Generate deterministic 12-digit barcode locally:
     // 6-digit numeric shop prefix + 6-digit timestamp sequence
     final shopPrefix = _numericShopPrefix(shopId);
-    final count = DateTime.now().millisecondsSinceEpoch % 1000000;
-    final counterPart = count.toString().padLeft(6, '0');
-    return '$shopPrefix$counterPart';
+    final now = DateTime.now();
+    final seq = (now.millisecondsSinceEpoch ~/ 1000) % 1000000;
+    return '$shopPrefix${seq.toString().padLeft(6, '0')}';
   }
 
   String _numericShopPrefix(String shopId) {
-    var hash = 0;
-    for (final codeUnit in shopId.codeUnits) {
-      hash = (hash * 31 + codeUnit) & 0x7FFFFFFF;
+    int hash = 0;
+    for (final code in shopId.codeUnits) {
+      hash = (hash * 31 + code) & 0x7FFFFFFF;
     }
-    final sixDigit = 100000 + (hash % 900000);
-    return sixDigit.toString();
+    return (hash % 900000 + 100000).toString();
   }
 
   // ── Categories ──
@@ -464,7 +479,7 @@ class OfflineProductRepository implements ProductRepository {
           controller.add([]);
           return;
         }
-        final list = _localDb.categoriesBox.values.whereType<Category>().toList();
+        final list = _localDb.getCategories(shopId);
         list.sort((a, b) => a.name.compareTo(b.name));
         controller.add(list);
       }
@@ -479,9 +494,10 @@ class OfflineProductRepository implements ProductRepository {
   Future<Category> addCategory(String shopId, Category category) async {
     final now = DateTime.now();
     final id = category.id.isEmpty ? const Uuid().v4() : category.id;
-    final newCategory = category.copyWith(id: id, updatedAt: now);
+    final newCategory =
+        category.copyWith(id: id, shopId: shopId, updatedAt: now);
 
-    await _localDb.categoriesBox.put(id, newCategory);
+    await _localDb.putCategory(shopId, newCategory);
 
     final syncItem = SyncQueueItem(
       localId: const Uuid().v4(),
@@ -508,9 +524,9 @@ class OfflineProductRepository implements ProductRepository {
   @override
   Future<void> updateCategory(String shopId, Category category) async {
     final now = DateTime.now();
-    final updated = category.copyWith(updatedAt: now);
+    final updated = category.copyWith(shopId: shopId, updatedAt: now);
 
-    await _localDb.categoriesBox.put(category.id, updated);
+    await _localDb.putCategory(shopId, updated);
 
     final priorDeps = _findPendingOperationIds(shopId, category.id);
     final syncItem = SyncQueueItem(
@@ -535,7 +551,7 @@ class OfflineProductRepository implements ProductRepository {
 
   @override
   Future<void> deleteCategory(String shopId, String categoryId) async {
-    await _localDb.categoriesBox.delete(categoryId);
+    await _localDb.deleteCategory(shopId, categoryId);
 
     final now = DateTime.now();
     final priorDeps = _findPendingOperationIds(shopId, categoryId);

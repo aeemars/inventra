@@ -12,6 +12,7 @@ class ScanHistoryEntry extends Equatable {
   final String scannedBy;
   final String scannedByName;
   final DateTime timestamp;
+  final String shopId;
 
   const ScanHistoryEntry({
     required this.id,
@@ -23,6 +24,7 @@ class ScanHistoryEntry extends Equatable {
     required this.scannedBy,
     required this.scannedByName,
     required this.timestamp,
+    this.shopId = '',
   });
 
   bool get isMatched => status == ScanMatchStatus.matched;
@@ -37,12 +39,19 @@ class ScanHistoryEntry extends Equatable {
       'scannedBy': scannedBy,
       'scannedByName': scannedByName,
       'timestamp': FieldValue.serverTimestamp(),
+      if (shopId.isNotEmpty) 'shopId': shopId,
     };
   }
 
   factory ScanHistoryEntry.fromFirestore(
-      DocumentSnapshot<Map<String, dynamic>> doc) {
+      DocumentSnapshot<Map<String, dynamic>> doc, [String? explicitShopId]) {
     final data = doc.data()!;
+    final resolvedShopId = explicitShopId ??
+        data['shopId'] as String? ??
+        (doc.reference.parent.parent != null
+            ? doc.reference.parent.parent!.id
+            : '');
+
     return ScanHistoryEntry(
       id: doc.id,
       barcodeValue: data['barcodeValue'] as String? ?? '',
@@ -57,11 +66,12 @@ class ScanHistoryEntry extends Equatable {
       scannedByName: data['scannedByName'] as String? ?? '',
       timestamp:
           (data['timestamp'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      shopId: resolvedShopId,
     );
   }
 
   @override
-  List<Object?> get props => [id, barcodeValue, status, timestamp];
+  List<Object?> get props => [id, barcodeValue, status, timestamp, shopId];
 }
 
 enum ScanMatchStatus { matched, unmatched }

@@ -23,6 +23,7 @@ class Product extends Equatable {
   final DateTime updatedAt;
   final String createdBy;
   final String updatedBy;
+  final String shopId;
 
   const Product({
     required this.id,
@@ -46,6 +47,7 @@ class Product extends Equatable {
     required this.updatedAt,
     required this.createdBy,
     required this.updatedBy,
+    this.shopId = '',
   });
 
   /// Generate search keywords from name and SKU for Firestore array-contains queries
@@ -101,6 +103,7 @@ class Product extends Equatable {
     DateTime? updatedAt,
     String? createdBy,
     String? updatedBy,
+    String? shopId,
   }) {
     return Product(
       id: id ?? this.id,
@@ -124,10 +127,11 @@ class Product extends Equatable {
       updatedAt: updatedAt ?? this.updatedAt,
       createdBy: createdBy ?? this.createdBy,
       updatedBy: updatedBy ?? this.updatedBy,
+      shopId: shopId ?? this.shopId,
     );
   }
 
   @override
   List<Object?> get props =>
-      [id, name, sku, barcode, quantity, sellingPrice, expiryDate];
+      [id, name, sku, barcode, quantity, sellingPrice, expiryDate, shopId];
 }

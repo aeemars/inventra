@@ -14,6 +14,7 @@ import '../../shared/models/scan_history_entry.dart';
 import '../../shared/models/stock_movement.dart';
 import '../../shared/models/stock_movement_model.dart';
 import 'sync_models.dart';
+import 'operation_journal.dart';
 
 /// The core background synchronization engine for Inventra.
 /// Implements deterministic topological dependency resolution, bounded exponential backoff,
@@ -78,6 +79,10 @@ class SyncProcessor with WidgetsBindingObserver {
 
     // Recover any stale processing operations from prior crashed sessions
     recoverStaleProcessingItems();
+    OfflineOperationManager.recoverIncompleteOperations(
+      localDb: _localDb,
+      syncProcessor: this,
+    );
 
     _connectivitySub = _connectivity.onConnectivityChanged.listen((isOnline) {
       if (isOnline) {
@@ -324,16 +329,35 @@ class SyncProcessor with WidgetsBindingObserver {
           ),
         );
 
-        debugPrint('🚀 [SYNC START] operation=${itemToExecute.operationType} id=${itemToExecute.localId} deps=${itemToExecute.allDependencies}');
+        // Update local transaction to 'syncing'
+        if (itemToExecute.operationType == SyncOperationType.createSale &&
+            itemToExecute.entityId != null) {
+          final tx = _localDb.getTransaction(
+              itemToExecute.shopId, itemToExecute.entityId!);
+          if (tx != null) {
+            await _localDb.putTransaction(
+              itemToExecute.shopId,
+              tx.copyWith(
+                status: TransactionStatus.syncing,
+                lastSyncAttemptAt: now,
+              ),
+            );
+          }
+        }
+
+        debugPrint(
+            '🚀 [SYNC START] operation=${itemToExecute.operationType} id=${itemToExecute.localId} deps=${itemToExecute.allDependencies}');
 
         try {
           await _executeOperation(itemToExecute);
           // Success: delete from pending queue
           await queueBox.delete(itemToExecute.localId);
           processedCount++;
-          debugPrint('✅ [SYNC SUCCESS] operation=${itemToExecute.operationType} id=${itemToExecute.localId}');
+          debugPrint(
+              '✅ [SYNC SUCCESS] operation=${itemToExecute.operationType} id=${itemToExecute.localId}');
         } catch (e) {
-          debugPrint('❌ [SYNC ERROR] operation=${itemToExecute.operationType} id=${itemToExecute.localId} error=$e');
+          debugPrint(
+              '❌ [SYNC ERROR] operation=${itemToExecute.operationType} id=${itemToExecute.localId} error=$e');
 
           final conflictCat = _classifyError(e);
 
@@ -352,24 +376,46 @@ class SyncProcessor with WidgetsBindingObserver {
               ),
             );
 
-            // If sale suffered a stock conflict, update the local transaction record
+            // If sale suffered a conflict, update local transaction record
             if (itemToExecute.operationType == SyncOperationType.createSale &&
                 itemToExecute.entityId != null) {
-              final tx = _localDb.salesTransactionsBox.get(itemToExecute.entityId!);
+              final tx = _localDb.getTransaction(
+                  itemToExecute.shopId, itemToExecute.entityId!);
               if (tx != null) {
-                await _localDb.salesTransactionsBox.put(
-                  itemToExecute.entityId!,
-                  tx.copyWith(status: 'conflict', note: explanation),
+                await _localDb.putTransaction(
+                  itemToExecute.shopId,
+                  tx.copyWith(
+                    status: TransactionStatus.conflict,
+                    syncError: explanation,
+                    note: explanation,
+                  ),
                 );
               }
             }
 
-            debugPrint('⚠️ [SYNC CONFLICT] Classified as ${conflictCat.name}: $explanation');
+            debugPrint(
+                '⚠️ [SYNC CONFLICT] Classified as ${conflictCat.name}: $explanation');
           } else {
             // Transient error (network loss, timeout)
             hasError = true;
             final newRetryCount = itemToExecute.retryCount + 1;
             const maxRetries = 5;
+
+            // If sale failed transiently, record failure on local transaction
+            if (itemToExecute.operationType == SyncOperationType.createSale &&
+                itemToExecute.entityId != null) {
+              final tx = _localDb.getTransaction(
+                  itemToExecute.shopId, itemToExecute.entityId!);
+              if (tx != null) {
+                await _localDb.putTransaction(
+                  itemToExecute.shopId,
+                  tx.copyWith(
+                    status: TransactionStatus.syncFailed,
+                    syncError: e.toString(),
+                  ),
+                );
+              }
+            }
 
             if (newRetryCount >= maxRetries) {
               await queueBox.put(
@@ -381,9 +427,11 @@ class SyncProcessor with WidgetsBindingObserver {
                   updatedAt: DateTime.now(),
                 ),
               );
-              debugPrint('🛑 [SYNC FAILED] Max retries reached ($maxRetries) for ${itemToExecute.localId}');
+              debugPrint(
+                  '🛑 [SYNC FAILED] Max retries reached ($maxRetries) for ${itemToExecute.localId}');
             } else {
-              final backoffMs = min(pow(2, newRetryCount) * 500, 30000).toInt();
+              final backoffMs =
+                  min(pow(2, newRetryCount) * 500, 30000).toInt();
               await queueBox.put(
                 itemToExecute.localId,
                 itemToExecute.copyWith(
@@ -393,7 +441,8 @@ class SyncProcessor with WidgetsBindingObserver {
                   updatedAt: DateTime.now(),
                 ),
               );
-              debugPrint('🔁 [SYNC RETRY] Retry #$newRetryCount scheduled with backoff ${backoffMs}ms for ${itemToExecute.localId}');
+              debugPrint(
+                  '🔁 [SYNC RETRY] Retry #$newRetryCount scheduled with backoff ${backoffMs}ms for ${itemToExecute.localId}');
               _setState(SyncEngineState.retryWait);
             }
             break; // Stop loop on transient failure to prevent hammering
@@ -531,7 +580,8 @@ class SyncProcessor with WidgetsBindingObserver {
         try {
           await FirebaseAuth.instance.currentUser?.getIdToken(true);
         } catch (_) {}
-        final callable = _functionsInstance.httpsCallable('validateStockDeduction');
+        final callable =
+            _functionsInstance.httpsCallable('validateStockDeduction');
         final response = await callable.call({
           'shopId': item.shopId,
           'items': item.payload['items'],
@@ -543,13 +593,14 @@ class SyncProcessor with WidgetsBindingObserver {
         final resData = Map<String, dynamic>.from(response.data as Map);
         final serverTxId = resData['transactionId'] as String?;
         if (serverTxId != null && item.entityId != null) {
-          final tx = _localDb.salesTransactionsBox.get(item.entityId);
+          final tx = _localDb.getTransaction(item.shopId, item.entityId!);
           if (tx != null) {
-            await _localDb.salesTransactionsBox.put(
-              item.entityId!,
+            await _localDb.putTransaction(
+              item.shopId,
               tx.copyWith(
-                status: 'synced',
+                status: TransactionStatus.synced,
                 serverTransactionId: serverTxId,
+                syncedAt: DateTime.now(),
               ),
             );
           }
@@ -560,7 +611,8 @@ class SyncProcessor with WidgetsBindingObserver {
         try {
           await FirebaseAuth.instance.currentUser?.getIdToken(true);
         } catch (_) {}
-        final callable = _functionsInstance.httpsCallable('processRestock');
+        final callable =
+            _functionsInstance.httpsCallable('processRestock');
         await callable.call({
           'shopId': item.shopId,
           'productId': item.entityId,
@@ -576,7 +628,8 @@ class SyncProcessor with WidgetsBindingObserver {
         try {
           await FirebaseAuth.instance.currentUser?.getIdToken(true);
         } catch (_) {}
-        final callable = _functionsInstance.httpsCallable('processStockAdjustment');
+        final callable =
+            _functionsInstance.httpsCallable('processStockAdjustment');
         await callable.call({
           'shopId': item.shopId,
           'productId': item.entityId,
@@ -588,54 +641,51 @@ class SyncProcessor with WidgetsBindingObserver {
         break;
 
       case SyncOperationType.createScan:
-        final docRef = _firestoreInstance
+        await _firestoreInstance
             .collection(FirestorePaths.scanHistory(item.shopId))
-            .doc(item.entityId);
-        await docRef.set(item.payload, SetOptions(merge: true));
+            .doc(item.entityId)
+            .set(item.payload, SetOptions(merge: true));
         break;
 
       case SyncOperationType.createCategory:
-        final docRef = _firestoreInstance
+        await _firestoreInstance
             .collection(FirestorePaths.categories(item.shopId))
-            .doc(item.entityId);
-        await docRef.set(item.payload, SetOptions(merge: true));
+            .doc(item.entityId)
+            .set(item.payload, SetOptions(merge: true));
         break;
 
       case SyncOperationType.updateCategory:
-        final docRef = _firestoreInstance
+        await _firestoreInstance
             .collection(FirestorePaths.categories(item.shopId))
-            .doc(item.entityId);
-        await docRef.update(item.payload);
+            .doc(item.entityId)
+            .update(item.payload);
         break;
 
       case SyncOperationType.deleteCategory:
-        final docRef = _firestoreInstance
+        await _firestoreInstance
             .collection(FirestorePaths.categories(item.shopId))
-            .doc(item.entityId);
-        await docRef.delete();
+            .doc(item.entityId)
+            .delete();
         break;
     }
   }
 
-  /// Centralized Remote -> Local Synchronization (Part B):
-  /// Incrementally synchronizes Firestore authoritative collections into local Hive boxes.
-  /// Protects local pending mutations (projected stock, unpushed edits, matching transactions).
-  /// Safely advances sync checkpoints only after local persistence succeeds.
+  /// Authoritative Remote -> Local sync pass.
+  /// Pulls fresh server mutations incrementally while strictly preserving any active offline changes.
   Future<void> pullRemoteChanges(String shopId) async {
+    if (_isPullingRemote) return;
     if (_connectivity.isOffline) return;
-    if (_activeShopId != shopId) return;
+    if (_activeShopId != null && _activeShopId != shopId) return;
 
     _isPullingRemote = true;
-    final checkpointKey = 'sync_checkpoint_$shopId';
+    debugPrint('📥 [REMOTE SYNC] Starting authoritative remote sync for shop: $shopId');
 
     try {
-      final rawMeta = _localDb.syncMetadataBox.get(checkpointKey);
-      SyncMetadata metadata = rawMeta is Map
-          ? SyncMetadata.fromMap(rawMeta)
+      final checkpointKey = 'sync_checkpoint_$shopId';
+      final currentMeta = _localDb.syncMetadataBox.get(checkpointKey);
+      SyncMetadata metadata = currentMeta is Map
+          ? SyncMetadata.fromMap(currentMeta)
           : SyncMetadata(shopId: shopId);
-
-      metadata = metadata.copyWith(lastAttemptedSyncAt: DateTime.now());
-      await _localDb.syncMetadataBox.put(checkpointKey, metadata.toMap());
 
       // ── 1. Gather all pending / conflict local mutations for conflict protection ──
       final pendingItems = _localDb.syncQueueBox.values
@@ -710,31 +760,35 @@ class SyncProcessor with WidgetsBindingObserver {
 
       for (final doc in productSnap.docs) {
         if (_activeShopId != shopId) return;
-        final product = ProductModel.fromFirestore(doc).toEntity();
-        if (newestProductTime == null || product.updatedAt.isAfter(newestProductTime)) {
+        final product =
+            ProductModel.fromFirestore(doc, shopId).toEntity(shopId);
+        if (newestProductTime == null ||
+            product.updatedAt.isAfter(newestProductTime)) {
           newestProductTime = product.updatedAt;
         }
 
         if (!pendingProductIds.contains(doc.id)) {
           // Server authoritative
-          await _localDb.productsBox.put(doc.id, product);
+          await _localDb.putProduct(shopId, product);
         } else {
           // Protected reconciliation: apply local pending stock delta over server stock
           final localDelta = pendingStockDeductions[doc.id] ?? 0;
           final projectedStock = product.quantity + localDelta;
-          final localProduct = _localDb.productsBox.get(doc.id);
+          final localProduct = _localDb.getProduct(shopId, doc.id);
 
           final reconciledProduct = product.copyWith(
             quantity: projectedStock > 0 ? projectedStock : 0,
             name: localProduct?.name ?? product.name,
           );
-          await _localDb.productsBox.put(doc.id, reconciledProduct);
-          debugPrint('🛡️ [SYNC RECONCILE] Product ${doc.id} preserved with local stock delta: $localDelta');
+          await _localDb.putProduct(shopId, reconciledProduct);
+          debugPrint(
+              '🛡️ [SYNC RECONCILE] Product ${doc.id} preserved with local stock delta: $localDelta');
         }
       }
 
       if (newestProductTime != null &&
-          (metadata.lastProductSyncAt == null || newestProductTime.isAfter(metadata.lastProductSyncAt!))) {
+          (metadata.lastProductSyncAt == null ||
+              newestProductTime.isAfter(metadata.lastProductSyncAt!))) {
         metadata = metadata.copyWith(lastProductSyncAt: newestProductTime);
         await _localDb.syncMetadataBox.put(checkpointKey, metadata.toMap());
       }
@@ -759,9 +813,12 @@ class SyncProcessor with WidgetsBindingObserver {
       for (final doc in categorySnap.docs) {
         if (_activeShopId != shopId) return;
         final data = doc.data();
-        final catCreatedAt = (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now();
-        final catUpdatedAt = (data['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now();
-        if (newestCategoryTime == null || catUpdatedAt.isAfter(newestCategoryTime)) {
+        final catCreatedAt =
+            (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now();
+        final catUpdatedAt =
+            (data['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now();
+        if (newestCategoryTime == null ||
+            catUpdatedAt.isAfter(newestCategoryTime)) {
           newestCategoryTime = catUpdatedAt;
         }
 
@@ -773,13 +830,15 @@ class SyncProcessor with WidgetsBindingObserver {
             productCount: (data['productCount'] as num?)?.toInt() ?? 0,
             createdAt: catCreatedAt,
             updatedAt: catUpdatedAt,
+            shopId: shopId,
           );
-          await _localDb.categoriesBox.put(doc.id, category);
+          await _localDb.putCategory(shopId, category);
         }
       }
 
       if (newestCategoryTime != null &&
-          (metadata.lastCategorySyncAt == null || newestCategoryTime.isAfter(metadata.lastCategorySyncAt!))) {
+          (metadata.lastCategorySyncAt == null ||
+              newestCategoryTime.isAfter(metadata.lastCategorySyncAt!))) {
         metadata = metadata.copyWith(lastCategorySyncAt: newestCategoryTime);
         await _localDb.syncMetadataBox.put(checkpointKey, metadata.toMap());
       }
@@ -808,30 +867,37 @@ class SyncProcessor with WidgetsBindingObserver {
           newestTxTime = tx.createdAt;
         }
 
-        // Reconcile with local transactions: match by server ID or local ID
+        // Reconcile with local transactions: match by server ID, local ID, or operationId
         SaleTransaction? matchedLocalTx;
-        for (final localTx in _localDb.salesTransactionsBox.values) {
-          if (localTx.id == doc.id || localTx.serverTransactionId == doc.id) {
+        for (final localTx in _localDb.getTransactions(shopId)) {
+          if (localTx.id == doc.id ||
+              localTx.serverTransactionId == doc.id ||
+              (localTx.operationId != null && localTx.operationId == doc.id)) {
             matchedLocalTx = localTx;
             break;
           }
         }
 
         if (matchedLocalTx != null) {
-          await _localDb.salesTransactionsBox.put(
-            matchedLocalTx.id,
+          await _localDb.putTransaction(
+            shopId,
             matchedLocalTx.copyWith(
-              status: 'synced',
+              status: TransactionStatus.synced,
               serverTransactionId: doc.id,
+              syncedAt: DateTime.now(),
             ),
           );
         } else {
-          await _localDb.salesTransactionsBox.put(doc.id, tx);
+          await _localDb.putTransaction(
+            shopId,
+            tx.copyWith(shopId: shopId, status: TransactionStatus.synced),
+          );
         }
       }
 
       if (newestTxTime != null &&
-          (metadata.lastTransactionSyncAt == null || newestTxTime.isAfter(metadata.lastTransactionSyncAt!))) {
+          (metadata.lastTransactionSyncAt == null ||
+              newestTxTime.isAfter(metadata.lastTransactionSyncAt!))) {
         metadata = metadata.copyWith(lastTransactionSyncAt: newestTxTime);
         await _localDb.syncMetadataBox.put(checkpointKey, metadata.toMap());
       }
@@ -855,15 +921,18 @@ class SyncProcessor with WidgetsBindingObserver {
 
       for (final doc in movementSnap.docs) {
         if (_activeShopId != shopId) return;
-        final movement = StockMovementModel.fromFirestore(doc).toEntity();
-        if (newestMovementTime == null || movement.createdAt.isAfter(newestMovementTime)) {
+        final movement =
+            StockMovementModel.fromFirestore(doc, shopId).toEntity(shopId);
+        if (newestMovementTime == null ||
+            movement.createdAt.isAfter(newestMovementTime)) {
           newestMovementTime = movement.createdAt;
         }
-        await _localDb.stockMovementsBox.put(doc.id, movement);
+        await _localDb.putStockMovement(shopId, movement);
       }
 
       if (newestMovementTime != null &&
-          (metadata.lastStockMovementSyncAt == null || newestMovementTime.isAfter(metadata.lastStockMovementSyncAt!))) {
+          (metadata.lastStockMovementSyncAt == null ||
+              newestMovementTime.isAfter(metadata.lastStockMovementSyncAt!))) {
         metadata = metadata.copyWith(lastStockMovementSyncAt: newestMovementTime);
         await _localDb.syncMetadataBox.put(checkpointKey, metadata.toMap());
       }
@@ -887,11 +956,12 @@ class SyncProcessor with WidgetsBindingObserver {
 
       for (final doc in scanSnap.docs) {
         if (_activeShopId != shopId) return;
-        final entry = ScanHistoryEntry.fromFirestore(doc);
+        final entry = ScanHistoryEntry.fromFirestore(doc, shopId);
         if (newestScanTime == null || entry.timestamp.isAfter(newestScanTime)) {
           newestScanTime = entry.timestamp;
         }
-        await _localDb.scanHistoryBox.put(doc.id, entry);
+        await _localDb.scanHistoryBox
+            .put(LocalDatabase.scopedKey(shopId, doc.id), entry);
       }
 
       if (newestScanTime != null &&
@@ -917,6 +987,20 @@ class SyncProcessor with WidgetsBindingObserver {
     final item = _localDb.syncQueueBox.get(localId);
     if (item == null) return;
 
+    if (item.operationType == SyncOperationType.createSale &&
+        item.entityId != null) {
+      final tx = _localDb.getTransaction(item.shopId, item.entityId!);
+      if (tx != null) {
+        await _localDb.putTransaction(
+          item.shopId,
+          tx.copyWith(
+            status: TransactionStatus.syncPending,
+            clearSyncError: true,
+          ),
+        );
+      }
+    }
+
     await _localDb.syncQueueBox.put(
       localId,
       item.copyWith(
@@ -939,12 +1023,13 @@ class SyncProcessor with WidgetsBindingObserver {
     final item = _localDb.syncQueueBox.get(localId);
     if (item == null) return;
 
-    if (item.operationType == SyncOperationType.createSale && item.entityId != null) {
-      final tx = _localDb.salesTransactionsBox.get(item.entityId!);
+    if (item.operationType == SyncOperationType.createSale &&
+        item.entityId != null) {
+      final tx = _localDb.getTransaction(item.shopId, item.entityId!);
       if (tx != null) {
-        await _localDb.salesTransactionsBox.put(
-          item.entityId!,
-          tx.copyWith(status: 'voided'),
+        await _localDb.putTransaction(
+          item.shopId,
+          tx.copyWith(status: TransactionStatus.voided),
         );
       }
     }

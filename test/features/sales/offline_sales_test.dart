@@ -6,6 +6,7 @@ import 'package:inventra/core/cache/local_database.dart';
 import 'package:inventra/features/inventory/domain/entities/product.dart';
 import 'package:inventra/features/sales/presentation/controllers/sales_queue_provider.dart';
 import 'package:inventra/features/scanner/data/scanner_repository.dart';
+import 'package:inventra/shared/models/stock_movement.dart';
 
 void main() {
   late Directory tempDir;
@@ -115,7 +116,7 @@ void main() {
       final tx = LocalDatabase.instance.salesTransactionsBox.get(txId);
       expect(tx, isNotNull);
       expect(tx!.total, 800.0); // 3*100 + 2*250
-      expect(tx.status, 'completed');
+      expect(tx.status, TransactionStatus.completedLocal);
       expect(tx.items.length, 2);
 
       // 3. Check local stock movements were recorded

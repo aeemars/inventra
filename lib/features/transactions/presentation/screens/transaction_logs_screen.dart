@@ -6,6 +6,7 @@ import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_sizes.dart';
 import '../../../../core/constants/app_typography.dart';
 import '../../../../core/widgets/pending_sync_badge.dart';
+import '../../../../core/sync/sync_models.dart';
 import '../../../../core/sync/sync_providers.dart';
 import '../../../../core/extensions/theme_ext.dart';
 import '../controllers/transaction_logs_controller.dart';
@@ -343,17 +344,47 @@ class _TransactionTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final queueItems = ref.watch(syncQueueItemsProvider).value ?? [];
-    final isPendingSync = queueItems.any((i) =>
-        i.entityId == entry.id ||
-        i.entityId == entry.referenceId ||
-        i.localId == entry.referenceId);
+    final matchingQueueItem = queueItems.cast<dynamic>().firstWhere(
+          (i) =>
+              i.entityId == entry.id ||
+              i.entityId == entry.referenceId ||
+              i.localId == entry.referenceId,
+          orElse: () => null,
+        );
+
+    Widget? statusBadge;
+    final status = entry.syncStatus ??
+        (matchingQueueItem != null
+            ? (matchingQueueItem.status == SyncStatus.conflict
+                ? 'conflict'
+                : matchingQueueItem.status == SyncStatus.processing
+                    ? 'syncing'
+                    : 'pending')
+            : null);
+
+    if (status == 'syncing') {
+      statusBadge = const PendingSyncBadge.syncing(compact: true);
+    } else if (status == 'conflict') {
+      statusBadge = const PendingSyncBadge.conflict(compact: true);
+    } else if (status == 'sync_failed') {
+      statusBadge = const PendingSyncBadge.failed(compact: true);
+    } else if (status == 'completed_local' ||
+        status == 'sync_pending' ||
+        matchingQueueItem != null) {
+      statusBadge = const PendingSyncBadge(
+        label: 'Pending Sync',
+        compact: true,
+      );
+    }
 
     final isPositive = entry.quantityChange > 0;
     final changeColor = isPositive
         ? const Color(0xFF16A34A) // green
         : const Color(0xFFDC2626); // red
     final iconBgColor = context.isDark
-        ? (isPositive ? const Color(0xFF16A34A).withValues(alpha: 0.15) : const Color(0xFFDC2626).withValues(alpha: 0.15))
+        ? (isPositive
+            ? const Color(0xFF16A34A).withValues(alpha: 0.15)
+            : const Color(0xFFDC2626).withValues(alpha: 0.15))
         : (isPositive ? const Color(0xFFDCFCE7) : const Color(0xFFFEE2E2));
     final iconColor = isPositive
         ? const Color(0xFF16A34A)
@@ -427,7 +458,7 @@ class _TransactionTile extends ConsumerWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    if (isPendingSync) const PendingSyncBadge(compact: true),
+                    if (statusBadge != null) statusBadge,
                   ],
                 ),
               ],

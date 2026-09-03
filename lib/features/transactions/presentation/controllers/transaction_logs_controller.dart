@@ -13,6 +13,7 @@ class TransactionLogEntry {
   final String referenceId;
   final int quantityChange;
   final DateTime createdAt;
+  final String? syncStatus;
 
   const TransactionLogEntry({
     required this.id,
@@ -22,6 +23,7 @@ class TransactionLogEntry {
     required this.referenceId,
     required this.quantityChange,
     required this.createdAt,
+    this.syncStatus,
   });
 
   bool get isIntake => quantityChange > 0;
@@ -44,12 +46,18 @@ final stockMovementsProvider =
 
   return Stream<List<TransactionLogEntry>>.multi((controller) {
     void emitLocal() {
-      final list = localDb.stockMovementsBox.values.map((m) {
+      final list = localDb.stockMovementsBox.values
+          .where((m) => m.shopId == shopId || m.shopId.isEmpty)
+          .map((m) {
         final qtyChange = m.quantityChange;
         final type = qtyChange > 0 ? 'intake' : 'sale';
         final typeLabel = qtyChange > 0 ? 'Inventory Intake' : 'Sales Order';
         final refId =
             m.reference ?? (m.id.length >= 8 ? m.id.substring(0, 8) : m.id);
+
+        final tx = m.reference != null
+            ? localDb.getTransaction(shopId, m.reference!)
+            : null;
 
         return TransactionLogEntry(
           id: m.id,
@@ -59,6 +67,7 @@ final stockMovementsProvider =
           referenceId: refId,
           quantityChange: qtyChange,
           createdAt: m.createdAt,
+          syncStatus: tx?.status,
         );
       }).toList();
 

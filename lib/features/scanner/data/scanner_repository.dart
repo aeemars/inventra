@@ -5,6 +5,7 @@ import '../../../core/cache/local_database.dart';
 import '../../../core/constants/firestore_paths.dart';
 import '../../../core/sync/sync_models.dart';
 import '../../../core/sync/sync_processor.dart';
+import '../../../core/sync/operation_journal.dart';
 import '../../../shared/models/scan_history_entry.dart';
 import '../../../shared/models/stock_movement.dart';
 
@@ -70,10 +71,12 @@ class ScannerRepository {
       scannedBy: entry.scannedBy,
       scannedByName: entry.scannedByName,
       timestamp: entry.timestamp,
+      shopId: shopId,
     );
 
-    // 1. Save locally to Hive
-    await _localDb.scanHistoryBox.put(entryId, updatedEntry);
+    // 1. Save locally to Hive with tenant isolation
+    await _localDb.scanHistoryBox
+        .put(LocalDatabase.scopedKey(shopId, entryId), updatedEntry);
 
     // 2. Queue for remote sync
     final priorDeps = entry.matchedProductId != null
@@ -109,7 +112,9 @@ class ScannerRepository {
           controller.add([]);
           return;
         }
-        final list = _localDb.scanHistoryBox.values.toList();
+        final list = _localDb.scanHistoryBox.values
+            .where((e) => e.shopId == shopId || e.shopId.isEmpty)
+            .toList();
         list.sort((a, b) => b.timestamp.compareTo(a.timestamp));
         controller.add(list.take(200).toList());
       }
@@ -132,8 +137,9 @@ class ScannerRepository {
         .snapshots()
         .listen((snapshot) async {
       for (final doc in snapshot.docs) {
-        final entry = ScanHistoryEntry.fromFirestore(doc);
-        await _localDb.scanHistoryBox.put(doc.id, entry);
+        final entry = ScanHistoryEntry.fromFirestore(doc, shopId);
+        await _localDb.scanHistoryBox
+            .put(LocalDatabase.scopedKey(shopId, doc.id), entry);
       }
     }, onError: (_) {});
   }
@@ -180,16 +186,14 @@ class ScannerRepository {
     double discount = 0.0,
     String? note,
   }) async {
-    final now = DateTime.now();
-
-    // 1. Verify local stock availability for all items
+    // 1. Verify local stock availability and tenant ownership for all items
     for (final item in items) {
       final pId = item['productId'] as String;
       final requestedQty = (item['quantity'] as num).toInt();
-      final product = _localDb.productsBox.get(pId);
+      final product = _localDb.getProduct(shopId, pId);
       final availableQty = product?.quantity ?? 0;
 
-      if (availableQty < requestedQty) {
+      if (product == null || availableQty < requestedQty) {
         throw InsufficientStockException(
           available: availableQty,
           requested: requestedQty,
@@ -197,103 +201,21 @@ class ScannerRepository {
       }
     }
 
-    // 2. Deduct local stock and generate line items
-    double subtotal = 0;
-    final saleItems = <SaleItem>[];
     final txId = const Uuid().v4();
 
-    for (final item in items) {
-      final pId = item['productId'] as String;
-      final qty = (item['quantity'] as num).toInt();
-      final product = _localDb.productsBox.get(pId)!;
-      final unitPrice = (item['unitPrice'] as num?)?.toDouble() ?? product.sellingPrice;
-      final lineTotal = unitPrice * qty;
-      subtotal += lineTotal;
-
-      // Update local product stock
-      final newQty = product.quantity - qty;
-      await _localDb.productsBox.put(
-        pId,
-        product.copyWith(quantity: newQty, updatedAt: now),
-      );
-
-      // Record local stock movement
-      final movementId = const Uuid().v4();
-      final movement = StockMovement(
-        id: movementId,
-        productId: pId,
-        productName: product.name,
-        type: 'sale',
-        quantityChange: -qty,
-        quantityBefore: product.quantity,
-        quantityAfter: newQty,
-        reference: txId,
-        userId: userId,
-        userName: userName,
-        source: 'pos',
-        createdAt: now,
-      );
-      await _localDb.stockMovementsBox.put(movementId, movement);
-
-      saleItems.add(SaleItem(
-        productId: pId,
-        productName: product.name,
-        sku: product.sku,
-        quantity: qty,
-        unitPrice: unitPrice,
-        totalPrice: lineTotal,
-      ));
-    }
-
-    final total = subtotal - discount;
-
-    // 3. Record local SaleTransaction
-    final transaction = SaleTransaction(
-      id: txId,
-      type: 'sale',
-      items: saleItems,
-      subtotal: subtotal,
-      discount: discount,
-      taxAmount: 0,
-      total: total,
-      paymentMethod: paymentMethod,
-      status: 'completed',
-      note: note,
-      createdBy: userId,
-      createdByName: userName,
-      createdAt: now,
-    );
-    await _localDb.salesTransactionsBox.put(txId, transaction);
-
-    // 4. Enqueue idempotent createSale sync operation
-    final productIds = items.map((i) => i['productId'] as String).toList();
-    final priorDeps = _findPendingDependencies(shopId, productIds);
-    final syncItem = SyncQueueItem(
-      localId: txId, // Stable operationId
+    // 2. Delegate to OfflineOperationManager for staged crash-safe execution
+    return await OfflineOperationManager.executeAtomicSale(
       shopId: shopId,
+      operationId: txId,
       userId: userId,
-      operationType: SyncOperationType.createSale,
-      entityType: 'sale',
-      entityId: txId,
-      payload: {
-        'items': items,
-        'paymentMethod': paymentMethod,
-        'discount': discount,
-        'note': note,
-      },
-      createdAt: now,
-      updatedAt: now,
-      dependsOnOperationIds: priorDeps,
-      dependsOnOperationId: priorDeps.isNotEmpty ? priorDeps.last : null,
+      userName: userName,
+      items: items,
+      paymentMethod: paymentMethod,
+      discount: discount,
+      note: note,
+      localDb: _localDb,
+      syncProcessor: _syncProcessor,
     );
-
-    if (_syncProcessor != null) {
-      await _syncProcessor.enqueue(syncItem);
-    } else {
-      await _localDb.syncQueueBox.put(syncItem.localId, syncItem);
-    }
-
-    return txId;
   }
 
   // ── Restock (Local-first + queued operation) ──
@@ -309,13 +231,13 @@ class ScannerRepository {
     String? supplier,
   }) async {
     final now = DateTime.now();
-    final product = _localDb.productsBox.get(productId);
+    final product = _localDb.getProduct(shopId, productId);
     final currentQty = product?.quantity ?? 0;
     final newQty = currentQty + quantity;
 
     if (product != null) {
-      await _localDb.productsBox.put(
-        productId,
+      await _localDb.putProduct(
+        shopId,
         product.copyWith(quantity: newQty, updatedAt: now),
       );
     }
@@ -334,8 +256,9 @@ class ScannerRepository {
       userName: userName,
       source: 'restock',
       createdAt: now,
+      shopId: shopId,
     );
-    await _localDb.stockMovementsBox.put(movementId, movement);
+    await _localDb.putStockMovement(shopId, movement);
 
     final priorDeps = _findPendingDependencies(shopId, [productId]);
     final syncItem = SyncQueueItem(
@@ -375,13 +298,14 @@ class ScannerRepository {
     String? reason,
   }) async {
     final now = DateTime.now();
-    final product = _localDb.productsBox.get(productId);
+    final product = _localDb.getProduct(shopId, productId);
     final currentQty = product?.quantity ?? 0;
-    final newQty = (currentQty + quantityChange) < 0 ? 0 : (currentQty + quantityChange);
+    final newQty =
+        (currentQty + quantityChange) < 0 ? 0 : (currentQty + quantityChange);
 
     if (product != null) {
-      await _localDb.productsBox.put(
-        productId,
+      await _localDb.putProduct(
+        shopId,
         product.copyWith(quantity: newQty, updatedAt: now),
       );
     }
@@ -400,8 +324,9 @@ class ScannerRepository {
       userName: userName,
       source: 'adjustment',
       createdAt: now,
+      shopId: shopId,
     );
-    await _localDb.stockMovementsBox.put(movementId, movement);
+    await _localDb.putStockMovement(shopId, movement);
 
     final priorDeps = _findPendingDependencies(shopId, [productId]);
     final syncItem = SyncQueueItem(
