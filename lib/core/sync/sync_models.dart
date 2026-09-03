@@ -250,3 +250,105 @@ class SyncQueueItem extends Equatable {
         conflictCategory,
       ];
 }
+
+/// Persistent metadata tracking sync checkpoints for incremental remote synchronization.
+class SyncMetadata extends Equatable {
+  final String shopId;
+  final DateTime? lastProductSyncAt;
+  final DateTime? lastCategorySyncAt;
+  final DateTime? lastTransactionSyncAt;
+  final DateTime? lastStockMovementSyncAt;
+  final DateTime? lastScanHistorySyncAt;
+  final DateTime? lastSuccessfulSyncAt;
+  final DateTime? lastAttemptedSyncAt;
+
+  const SyncMetadata({
+    required this.shopId,
+    this.lastProductSyncAt,
+    this.lastCategorySyncAt,
+    this.lastTransactionSyncAt,
+    this.lastStockMovementSyncAt,
+    this.lastScanHistorySyncAt,
+    this.lastSuccessfulSyncAt,
+    this.lastAttemptedSyncAt,
+  });
+
+  SyncMetadata copyWith({
+    String? shopId,
+    DateTime? lastProductSyncAt,
+    DateTime? lastCategorySyncAt,
+    DateTime? lastTransactionSyncAt,
+    DateTime? lastStockMovementSyncAt,
+    DateTime? lastScanHistorySyncAt,
+    DateTime? lastSuccessfulSyncAt,
+    DateTime? lastAttemptedSyncAt,
+  }) {
+    return SyncMetadata(
+      shopId: shopId ?? this.shopId,
+      lastProductSyncAt: lastProductSyncAt ?? this.lastProductSyncAt,
+      lastCategorySyncAt: lastCategorySyncAt ?? this.lastCategorySyncAt,
+      lastTransactionSyncAt:
+          lastTransactionSyncAt ?? this.lastTransactionSyncAt,
+      lastStockMovementSyncAt:
+          lastStockMovementSyncAt ?? this.lastStockMovementSyncAt,
+      lastScanHistorySyncAt:
+          lastScanHistorySyncAt ?? this.lastScanHistorySyncAt,
+      lastSuccessfulSyncAt:
+          lastSuccessfulSyncAt ?? this.lastSuccessfulSyncAt,
+      lastAttemptedSyncAt:
+          lastAttemptedSyncAt ?? this.lastAttemptedSyncAt,
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'shopId': shopId,
+      'lastProductSyncAt': lastProductSyncAt?.toIso8601String(),
+      'lastCategorySyncAt': lastCategorySyncAt?.toIso8601String(),
+      'lastTransactionSyncAt': lastTransactionSyncAt?.toIso8601String(),
+      'lastStockMovementSyncAt': lastStockMovementSyncAt?.toIso8601String(),
+      'lastScanHistorySyncAt': lastScanHistorySyncAt?.toIso8601String(),
+      'lastSuccessfulSyncAt': lastSuccessfulSyncAt?.toIso8601String(),
+      'lastAttemptedSyncAt': lastAttemptedSyncAt?.toIso8601String(),
+    };
+  }
+
+  factory SyncMetadata.fromMap(Map<dynamic, dynamic> map) {
+    return SyncMetadata(
+      shopId: map['shopId'] as String? ?? '',
+      lastProductSyncAt: map['lastProductSyncAt'] != null
+          ? DateTime.tryParse(map['lastProductSyncAt'].toString())
+          : null,
+      lastCategorySyncAt: map['lastCategorySyncAt'] != null
+          ? DateTime.tryParse(map['lastCategorySyncAt'].toString())
+          : null,
+      lastTransactionSyncAt: map['lastTransactionSyncAt'] != null
+          ? DateTime.tryParse(map['lastTransactionSyncAt'].toString())
+          : null,
+      lastStockMovementSyncAt: map['lastStockMovementSyncAt'] != null
+          ? DateTime.tryParse(map['lastStockMovementSyncAt'].toString())
+          : null,
+      lastScanHistorySyncAt: map['lastScanHistorySyncAt'] != null
+          ? DateTime.tryParse(map['lastScanHistorySyncAt'].toString())
+          : null,
+      lastSuccessfulSyncAt: map['lastSuccessfulSyncAt'] != null
+          ? DateTime.tryParse(map['lastSuccessfulSyncAt'].toString())
+          : null,
+      lastAttemptedSyncAt: map['lastAttemptedSyncAt'] != null
+          ? DateTime.tryParse(map['lastAttemptedSyncAt'].toString())
+          : null,
+    );
+  }
+
+  @override
+  List<Object?> get props => [
+        shopId,
+        lastProductSyncAt,
+        lastCategorySyncAt,
+        lastTransactionSyncAt,
+        lastStockMovementSyncAt,
+        lastScanHistorySyncAt,
+        lastSuccessfulSyncAt,
+        lastAttemptedSyncAt,
+      ];
+}

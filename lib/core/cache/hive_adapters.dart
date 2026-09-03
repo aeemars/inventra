@@ -169,12 +169,13 @@ class SaleTransactionAdapter extends TypeAdapter<SaleTransaction> {
       createdBy: fields[10] as String,
       createdByName: fields[11] as String,
       createdAt: fields[12] as DateTime,
+      serverTransactionId: fields[13] as String?,
     );
   }
 
   @override
   void write(BinaryWriter writer, SaleTransaction obj) {
-    writer.writeByte(13);
+    writer.writeByte(14);
     writer
       ..writeByte(0)..write(obj.id)
       ..writeByte(1)..write(obj.type)
@@ -188,7 +189,8 @@ class SaleTransactionAdapter extends TypeAdapter<SaleTransaction> {
       ..writeByte(9)..write(obj.note)
       ..writeByte(10)..write(obj.createdBy)
       ..writeByte(11)..write(obj.createdByName)
-      ..writeByte(12)..write(obj.createdAt);
+      ..writeByte(12)..write(obj.createdAt)
+      ..writeByte(13)..write(obj.serverTransactionId);
   }
 }
 

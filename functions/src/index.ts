@@ -11,6 +11,50 @@ function hashPin(pin: string, salt: string): string {
   return crypto.createHash("sha256").update(`${pin}:${salt}`).digest("hex");
 }
 
+/**
+ * Validate that an operationId is a valid non-empty string, within 128 chars,
+ * and contains only alphanumeric characters, dashes, or underscores to prevent path traversal.
+ */
+export function validateOperationId(operationId: any): string {
+  if (typeof operationId !== "string" || operationId.trim().length === 0) {
+    throw new HttpsError("invalid-argument", "operationId must be a non-empty string");
+  }
+  const trimmed = operationId.trim();
+  if (trimmed.length > 128) {
+    throw new HttpsError("invalid-argument", "operationId exceeds maximum length of 128 characters");
+  }
+  if (!/^[a-zA-Z0-9_-]+$/.test(trimmed)) {
+    throw new HttpsError(
+      "invalid-argument",
+      "operationId contains invalid characters. Only alphanumeric, hyphen, and underscore are allowed."
+    );
+  }
+  return trimmed;
+}
+
+/**
+ * Deterministically serialize any JavaScript object by sorting keys recursively.
+ */
+export function canonicalJsonStringify(obj: any): string {
+  if (obj === null || typeof obj !== "object") {
+    return JSON.stringify(obj);
+  }
+  if (Array.isArray(obj)) {
+    return "[" + obj.map(canonicalJsonStringify).join(",") + "]";
+  }
+  const sortedKeys = Object.keys(obj).sort();
+  const pairs = sortedKeys.map((key) => `${JSON.stringify(key)}:${canonicalJsonStringify(obj[key])}`);
+  return "{" + pairs.join(",") + "}";
+}
+
+/**
+ * Compute SHA-256 hash of canonical JSON string to detect payload tampering or reuse.
+ */
+export function canonicalRequestHash(data: any): string {
+  const canonical = canonicalJsonStringify(data);
+  return crypto.createHash("sha256").update(canonical).digest("hex");
+}
+
 function generateResetCode(): string {
   return crypto.randomInt(100000, 999999).toString(); // 6-digit code
 }
@@ -406,30 +450,58 @@ export const validateStockDeduction = onCall({enforceAppCheck: false, invoker: "
     throw new HttpsError("invalid-argument", "Transaction exceeds max limit of 50 items");
   }
 
+  const validatedOpId = operationId ? validateOperationId(operationId) : null;
   const {name: userName} = await verifyShopMember(uid, shopId, ["owner", "manager", "cashier"]);
   await checkRateLimit(uid, "validateStockDeduction", 60);
 
-  // Idempotency check: return cached result if operation was already processed
-  if (operationId && typeof operationId === "string") {
-    const opDoc = await db.doc(`shops/${shopId}/sync_operations/${operationId}`).get();
-    if (opDoc.exists) {
-      const opData = opDoc.data()!;
-      return {
-        transactionId: opData.transactionId,
-        total: opData.total,
-        alreadyProcessed: true,
-      };
-    }
-  }
-
   const cleanPaymentMethod = ALLOWED_PAYMENT_METHODS.includes(paymentMethod) ? paymentMethod : "cash";
+  const discountAmount = Number(discount) || 0;
+
+  // Normalized payload for deterministic fingerprinting
+  const payloadToHash = {
+    shopId,
+    items: items.map((i: any) => ({
+      productId: String(i.productId || "").trim(),
+      quantity: Number(i.quantity) || 0,
+    })).sort((a: any, b: any) => a.productId.localeCompare(b.productId)),
+    paymentMethod: cleanPaymentMethod,
+    discount: discountAmount,
+    note: typeof note === "string" ? note.trim().substring(0, 500) : null,
+  };
+  const requestHash = validatedOpId ? canonicalRequestHash(payloadToHash) : null;
 
   try {
     const result = await db.runTransaction(async (transaction: admin.firestore.Transaction) => {
+      // 1. Atomic Idempotency Check INSIDE the transaction (first read)
+      if (validatedOpId) {
+        const opRef = db.doc(`shops/${shopId}/sync_operations/${validatedOpId}`);
+        const opDoc = await transaction.get(opRef);
+        if (opDoc.exists) {
+          const opData = opDoc.data()!;
+          if (opData.shopId !== shopId || opData.operationType !== "sale") {
+            throw new HttpsError("failed-precondition", "operation-mismatch: Operation belongs to a different shop or type");
+          }
+          if (opData.userId && opData.userId !== uid) {
+            throw new HttpsError("permission-denied", "Cannot reuse operationId created by another user");
+          }
+          if (opData.requestHash && opData.requestHash !== requestHash) {
+            throw new HttpsError(
+              "failed-precondition",
+              `operation-id-reused: Payload differs from original operation with ID ${validatedOpId}`
+            );
+          }
+          return {
+            transactionId: opData.result?.transactionId || opData.transactionId,
+            total: opData.result?.total ?? opData.total,
+            alreadyProcessed: true,
+          };
+        }
+      }
+
       let subtotal = 0;
       const productUpdates: {ref: admin.firestore.DocumentReference; newQty: number; product: any; qty: number}[] = [];
 
-      // Read all products first
+      // 2. Read all products in transaction
       for (const item of items) {
         if (!item.productId || typeof item.productId !== "string") {
           throw new HttpsError("invalid-argument", "Invalid productId in item list");
@@ -471,8 +543,6 @@ export const validateStockDeduction = onCall({enforceAppCheck: false, invoker: "
         });
       }
 
-      // Validate discount
-      const discountAmount = Number(discount) || 0;
       if (isNaN(discountAmount) || discountAmount < 0 || discountAmount > subtotal) {
         throw new HttpsError("invalid-argument", "Discount must be between 0 and subtotal");
       }
@@ -536,21 +606,29 @@ export const validateStockDeduction = onCall({enforceAppCheck: false, invoker: "
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       }, {merge: true});
 
-      // Write idempotency record inside transaction if operationId provided
-      if (operationId && typeof operationId === "string") {
-        const opRef = db.doc(`shops/${shopId}/sync_operations/${operationId}`);
+      // 3. Atomically write standard idempotency record inside transaction
+      if (validatedOpId) {
+        const opRef = db.doc(`shops/${shopId}/sync_operations/${validatedOpId}`);
         transaction.set(opRef, {
-          operationId,
+          operationId: validatedOpId,
           operationType: "sale",
-          userId: uid,
           shopId,
+          userId: uid,
+          status: "completed",
+          requestHash,
+          result: {
+            transactionId: transactionRef.id,
+            total,
+          },
           transactionId: transactionRef.id,
           total,
           processedAt: admin.firestore.FieldValue.serverTimestamp(),
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          metadata: {},
         });
       }
 
-      return {transactionId: transactionRef.id, total};
+      return {transactionId: transactionRef.id, total, alreadyProcessed: false};
     });
 
     return result;
@@ -577,25 +655,49 @@ export const processRestock = onCall({enforceAppCheck: false, invoker: "public"}
     throw new HttpsError("invalid-argument", "Restock quantity must be a positive integer");
   }
 
+  const validatedOpId = operationId ? validateOperationId(operationId) : null;
   const {name: userName} = await verifyShopMember(uid, shopId, ["owner", "manager"]);
   await checkRateLimit(uid, "processRestock", 30);
 
-  // Idempotency check: return cached result if operation was already processed
-  if (operationId && typeof operationId === "string") {
-    const opDoc = await db.doc(`shops/${shopId}/sync_operations/${operationId}`).get();
-    if (opDoc.exists) {
-      const opData = opDoc.data()!;
-      return {
-        productId: opData.productId,
-        newQuantity: opData.newQuantity,
-        alreadyProcessed: true,
-      };
-    }
-  }
+  const payloadToHash = {
+    shopId,
+    productId: String(productId).trim(),
+    quantity: qty,
+    costPrice: typeof costPrice === "number" ? costPrice : null,
+    supplier: typeof supplier === "string" ? supplier.trim() : null,
+    note: typeof note === "string" ? note.trim() : null,
+  };
+  const requestHash = validatedOpId ? canonicalRequestHash(payloadToHash) : null;
 
   const productRef = db.doc(`shops/${shopId}/products/${productId}`);
 
   return db.runTransaction(async (txn) => {
+    // 1. Atomic Idempotency Check INSIDE transaction (first read)
+    if (validatedOpId) {
+      const opRef = db.doc(`shops/${shopId}/sync_operations/${validatedOpId}`);
+      const opDoc = await txn.get(opRef);
+      if (opDoc.exists) {
+        const opData = opDoc.data()!;
+        if (opData.shopId !== shopId || opData.operationType !== "restock") {
+          throw new HttpsError("failed-precondition", "operation-mismatch: Operation belongs to a different shop or type");
+        }
+        if (opData.userId && opData.userId !== uid) {
+          throw new HttpsError("permission-denied", "Cannot reuse operationId created by another user");
+        }
+        if (opData.requestHash && opData.requestHash !== requestHash) {
+          throw new HttpsError(
+            "failed-precondition",
+            `operation-id-reused: Payload differs from original operation with ID ${validatedOpId}`
+          );
+        }
+        return {
+          productId: opData.result?.productId || opData.productId,
+          newQuantity: opData.result?.newQuantity ?? opData.newQuantity,
+          alreadyProcessed: true,
+        };
+      }
+    }
+
     const pSnap = await txn.get(productRef);
     if (!pSnap.exists) throw new HttpsError("not-found", "Product not found");
 
@@ -629,21 +731,29 @@ export const processRestock = onCall({enforceAppCheck: false, invoker: "public"}
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
-    // Write idempotency record inside transaction if operationId provided
-    if (operationId && typeof operationId === "string") {
-      const opRef = db.doc(`shops/${shopId}/sync_operations/${operationId}`);
+    // 2. Atomically write standard idempotency record inside transaction
+    if (validatedOpId) {
+      const opRef = db.doc(`shops/${shopId}/sync_operations/${validatedOpId}`);
       txn.set(opRef, {
-        operationId,
+        operationId: validatedOpId,
         operationType: "restock",
-        userId: uid,
         shopId,
+        userId: uid,
+        status: "completed",
+        requestHash,
+        result: {
+          productId,
+          newQuantity: newQty,
+        },
         productId,
         newQuantity: newQty,
         processedAt: admin.firestore.FieldValue.serverTimestamp(),
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        metadata: {},
       });
     }
 
-    return {productId, newQuantity: newQty};
+    return {productId, newQuantity: newQty, alreadyProcessed: false};
   });
 });
 
@@ -659,25 +769,48 @@ export const processStockAdjustment = onCall({enforceAppCheck: false, invoker: "
     throw new HttpsError("invalid-argument", "shopId and productId are required");
   }
 
+  const validatedOpId = operationId ? validateOperationId(operationId) : null;
   const {name: userName} = await verifyShopMember(uid, shopId, ["owner", "manager"]);
   await checkRateLimit(uid, "processStockAdjustment", 30);
 
-  // Idempotency check: return cached result if operation was already processed
-  if (operationId && typeof operationId === "string") {
-    const opDoc = await db.doc(`shops/${shopId}/sync_operations/${operationId}`).get();
-    if (opDoc.exists) {
-      const opData = opDoc.data()!;
-      return {
-        productId: opData.productId,
-        newQuantity: opData.newQuantity,
-        alreadyProcessed: true,
-      };
-    }
-  }
+  const payloadToHash = {
+    shopId,
+    productId: String(productId).trim(),
+    newQuantity: newQuantity !== undefined ? Number(newQuantity) : null,
+    quantityChange: quantityChange !== undefined ? Number(quantityChange) : null,
+    reason: typeof reason === "string" ? reason.trim() : null,
+  };
+  const requestHash = validatedOpId ? canonicalRequestHash(payloadToHash) : null;
 
   const productRef = db.doc(`shops/${shopId}/products/${productId}`);
 
   return db.runTransaction(async (txn) => {
+    // 1. Atomic Idempotency Check INSIDE transaction (first read)
+    if (validatedOpId) {
+      const opRef = db.doc(`shops/${shopId}/sync_operations/${validatedOpId}`);
+      const opDoc = await txn.get(opRef);
+      if (opDoc.exists) {
+        const opData = opDoc.data()!;
+        if (opData.shopId !== shopId || opData.operationType !== "adjustment") {
+          throw new HttpsError("failed-precondition", "operation-mismatch: Operation belongs to a different shop or type");
+        }
+        if (opData.userId && opData.userId !== uid) {
+          throw new HttpsError("permission-denied", "Cannot reuse operationId created by another user");
+        }
+        if (opData.requestHash && opData.requestHash !== requestHash) {
+          throw new HttpsError(
+            "failed-precondition",
+            `operation-id-reused: Payload differs from original operation with ID ${validatedOpId}`
+          );
+        }
+        return {
+          productId: opData.result?.productId || opData.productId,
+          newQuantity: opData.result?.newQuantity ?? opData.newQuantity,
+          alreadyProcessed: true,
+        };
+      }
+    }
+
     const pSnap = await txn.get(productRef);
     if (!pSnap.exists) throw new HttpsError("not-found", "Product not found");
 
@@ -687,6 +820,7 @@ export const processStockAdjustment = onCall({enforceAppCheck: false, invoker: "
     let targetQty: number;
     let diff: number;
 
+    // Authoritative stock adjustment: prefer quantityChange if provided
     if (typeof quantityChange === "number" && Number.isInteger(quantityChange)) {
       diff = quantityChange;
       targetQty = Math.max(0, currentQty + diff);
@@ -718,21 +852,29 @@ export const processStockAdjustment = onCall({enforceAppCheck: false, invoker: "
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
-    // Write idempotency record inside transaction if operationId provided
-    if (operationId && typeof operationId === "string") {
-      const opRef = db.doc(`shops/${shopId}/sync_operations/${operationId}`);
+    // 2. Atomically write standard idempotency record inside transaction
+    if (validatedOpId) {
+      const opRef = db.doc(`shops/${shopId}/sync_operations/${validatedOpId}`);
       txn.set(opRef, {
-        operationId,
+        operationId: validatedOpId,
         operationType: "adjustment",
-        userId: uid,
         shopId,
+        userId: uid,
+        status: "completed",
+        requestHash,
+        result: {
+          productId,
+          newQuantity: targetQty,
+        },
         productId,
         newQuantity: targetQty,
         processedAt: admin.firestore.FieldValue.serverTimestamp(),
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        metadata: {},
       });
     }
 
-    return {productId, newQuantity: targetQty};
+    return {productId, newQuantity: targetQty, alreadyProcessed: false};
   });
 });
 

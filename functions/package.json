@@ -8,7 +8,7 @@
     "shell": "npm run build && firebase functions:shell",
     "start": "npm run shell",
     "deploy": "firebase deploy --only functions",
-    "test": "jest",
+    "test": "tsc && jest --config '{\"testEnvironment\":\"node\",\"testMatch\":[\"**/lib/**/*.test.js\"]}'",
     "logs": "firebase functions:log"
   },
   "engines": {

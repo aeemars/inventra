@@ -54,6 +54,7 @@ class SaleTransaction extends Equatable {
   final String createdBy;
   final String createdByName;
   final DateTime createdAt;
+  final String? serverTransactionId;
 
   const SaleTransaction({
     required this.id,
@@ -69,6 +70,7 @@ class SaleTransaction extends Equatable {
     required this.createdBy,
     required this.createdByName,
     required this.createdAt,
+    this.serverTransactionId,
   });
 
   SaleTransaction copyWith({
@@ -85,6 +87,7 @@ class SaleTransaction extends Equatable {
     String? createdBy,
     String? createdByName,
     DateTime? createdAt,
+    String? serverTransactionId,
   }) {
     return SaleTransaction(
       id: id ?? this.id,
@@ -100,13 +103,14 @@ class SaleTransaction extends Equatable {
       createdBy: createdBy ?? this.createdBy,
       createdByName: createdByName ?? this.createdByName,
       createdAt: createdAt ?? this.createdAt,
+      serverTransactionId: serverTransactionId ?? this.serverTransactionId,
     );
   }
 
   int get itemCount => items.fold(0, (sum, item) => sum + item.quantity);
 
   @override
-  List<Object?> get props => [id, total, items, status];
+  List<Object?> get props => [id, total, items, status, serverTransactionId];
 }
 
 class SaleItem extends Equatable {

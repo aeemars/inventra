@@ -1,3 +1,5 @@
+import {describe, test, expect} from "@jest/globals";
+
 describe("Security Logic Unit Tests", () => {
   test("validateStockDeduction rejects negative quantity", () => {
     const qty = -5;

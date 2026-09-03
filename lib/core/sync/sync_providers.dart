@@ -69,3 +69,17 @@ final conflictSyncCountProvider = Provider<int>((ref) {
     error: (_, __) => 0,
   );
 });
+
+final syncMetadataProvider = StreamProvider<SyncMetadata?>((ref) {
+  final processor = ref.watch(syncProcessorProvider);
+  final currentShopId = ref.watch(currentShopIdProvider);
+  return Stream<SyncMetadata?>.multi((controller) {
+    controller.add(processor.getSyncMetadata(currentShopId));
+    final sub = processor.onMetadataChanged.listen((meta) {
+      if (currentShopId == null || meta?.shopId == currentShopId) {
+        controller.add(meta);
+      }
+    });
+    controller.onCancel = () => sub.cancel();
+  });
+});

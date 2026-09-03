@@ -8,7 +8,10 @@ import '../cache/local_database.dart';
 import '../connectivity/connectivity_service.dart';
 import '../constants/firestore_paths.dart';
 import '../../features/inventory/data/models/product_model.dart';
+import '../../features/inventory/domain/entities/category.dart';
 import '../../features/sales/data/models/transaction_model.dart';
+import '../../shared/models/scan_history_entry.dart';
+import '../../shared/models/stock_movement.dart';
 import '../../shared/models/stock_movement_model.dart';
 import 'sync_models.dart';
 
@@ -29,10 +32,26 @@ class SyncProcessor with WidgetsBindingObserver {
   bool _isProcessing = false;
   bool get isProcessing => _isProcessing;
 
+  bool _isPullingRemote = false;
+  bool get isPullingRemote => _isPullingRemote;
+
   final _stateController = StreamController<SyncEngineState>.broadcast();
   SyncEngineState _currentState = SyncEngineState.idle;
   SyncEngineState get currentState => _currentState;
   Stream<SyncEngineState> get onStateChanged => _stateController.stream;
+
+  final _metadataController = StreamController<SyncMetadata?>.broadcast();
+  Stream<SyncMetadata?> get onMetadataChanged => _metadataController.stream;
+
+  SyncMetadata? getSyncMetadata([String? shopId]) {
+    final targetShop = shopId ?? _activeShopId;
+    if (targetShop == null) return null;
+    final raw = _localDb.syncMetadataBox.get('sync_checkpoint_$targetShop');
+    if (raw is Map) {
+      return SyncMetadata.fromMap(raw);
+    }
+    return null;
+  }
 
   StreamSubscription? _connectivitySub;
   String? _activeShopId;
@@ -528,7 +547,10 @@ class SyncProcessor with WidgetsBindingObserver {
           if (tx != null) {
             await _localDb.salesTransactionsBox.put(
               item.entityId!,
-              tx.copyWith(status: 'completed'),
+              tx.copyWith(
+                status: 'synced',
+                serverTransactionId: serverTxId,
+              ),
             );
           }
         }
@@ -595,60 +617,298 @@ class SyncProcessor with WidgetsBindingObserver {
     }
   }
 
-  /// Two-way systematic remote reconciliation (Part 15):
-  /// Pulls remote Firestore changes into Hive cache while protecting any
-  /// local entity that has an unsynchronized mutation in the queue.
+  /// Centralized Remote -> Local Synchronization (Part B):
+  /// Incrementally synchronizes Firestore authoritative collections into local Hive boxes.
+  /// Protects local pending mutations (projected stock, unpushed edits, matching transactions).
+  /// Safely advances sync checkpoints only after local persistence succeeds.
   Future<void> pullRemoteChanges(String shopId) async {
     if (_connectivity.isOffline) return;
+    if (_activeShopId != shopId) return;
+
+    _isPullingRemote = true;
+    final checkpointKey = 'sync_checkpoint_$shopId';
 
     try {
-      // 1. Gather all entity IDs with pending/conflict operations
-      final pendingEntityIds = _localDb.syncQueueBox.values
+      final rawMeta = _localDb.syncMetadataBox.get(checkpointKey);
+      SyncMetadata metadata = rawMeta is Map
+          ? SyncMetadata.fromMap(rawMeta)
+          : SyncMetadata(shopId: shopId);
+
+      metadata = metadata.copyWith(lastAttemptedSyncAt: DateTime.now());
+      await _localDb.syncMetadataBox.put(checkpointKey, metadata.toMap());
+
+      // ── 1. Gather all pending / conflict local mutations for conflict protection ──
+      final pendingItems = _localDb.syncQueueBox.values
           .where((i) =>
               i.shopId == shopId &&
-              i.entityId != null &&
               (i.status == SyncStatus.pending ||
                   i.status == SyncStatus.processing ||
                   i.status == SyncStatus.conflict))
-          .map((i) => i.entityId!)
-          .toSet();
+          .toList();
 
-      // 2. Fetch remote products and reconcile
-      final productSnap =
-          await _firestoreInstance.collection(FirestorePaths.products(shopId)).get();
+      final pendingProductIds = <String>{};
+      final pendingCategoryIds = <String>{};
+      final pendingStockDeductions = <String, int>{}; // productId -> net quantity change
 
-      for (final doc in productSnap.docs) {
-        if (!pendingEntityIds.contains(doc.id)) {
-          final product = ProductModel.fromFirestore(doc).toEntity();
-          await _localDb.productsBox.put(doc.id, product);
+      for (final item in pendingItems) {
+        if (item.entityType == 'product' && item.entityId != null) {
+          pendingProductIds.add(item.entityId!);
+        }
+        if (item.entityType == 'category' && item.entityId != null) {
+          pendingCategoryIds.add(item.entityId!);
+        }
+        if (item.operationType == SyncOperationType.createSale) {
+          final items = item.payload['items'] as List<dynamic>? ?? [];
+          for (final it in items) {
+            if (it is Map) {
+              final pId = it['productId'] as String?;
+              final qty = (it['quantity'] as num?)?.toInt() ?? 0;
+              if (pId != null) {
+                pendingProductIds.add(pId);
+                pendingStockDeductions[pId] =
+                    (pendingStockDeductions[pId] ?? 0) - qty;
+              }
+            }
+          }
+        }
+        if (item.operationType == SyncOperationType.restock) {
+          final pId = item.entityId ?? item.payload['productId'] as String?;
+          final qty = (item.payload['quantity'] as num?)?.toInt() ?? 0;
+          if (pId != null) {
+            pendingProductIds.add(pId);
+            pendingStockDeductions[pId] =
+                (pendingStockDeductions[pId] ?? 0) + qty;
+          }
+        }
+        if (item.operationType == SyncOperationType.stockAdjustment) {
+          final pId = item.entityId ?? item.payload['productId'] as String?;
+          final diff = (item.payload['quantityChange'] as num?)?.toInt();
+          if (pId != null && diff != null) {
+            pendingProductIds.add(pId);
+            pendingStockDeductions[pId] =
+                (pendingStockDeductions[pId] ?? 0) + diff;
+          }
         }
       }
 
-      // 3. Fetch remote stock movements
-      final movementSnap = await _firestoreInstance
-          .collection(FirestorePaths.stockMovements(shopId))
-          .orderBy('createdAt', descending: true)
-          .limit(100)
-          .get();
+      // ── 2. Incremental Sync: Products ──
+      if (_activeShopId != shopId) return;
+      Query<Map<String, dynamic>> productQuery = _firestoreInstance
+          .collection(FirestorePaths.products(shopId));
+
+      if (metadata.lastProductSyncAt != null) {
+        productQuery = productQuery.where(
+          'updatedAt',
+          isGreaterThan: Timestamp.fromDate(metadata.lastProductSyncAt!),
+        ).orderBy('updatedAt');
+      } else {
+        productQuery = productQuery.limit(250);
+      }
+
+      final productSnap = await productQuery.get();
+      DateTime? newestProductTime = metadata.lastProductSyncAt;
+
+      for (final doc in productSnap.docs) {
+        if (_activeShopId != shopId) return;
+        final product = ProductModel.fromFirestore(doc).toEntity();
+        if (newestProductTime == null || product.updatedAt.isAfter(newestProductTime)) {
+          newestProductTime = product.updatedAt;
+        }
+
+        if (!pendingProductIds.contains(doc.id)) {
+          // Server authoritative
+          await _localDb.productsBox.put(doc.id, product);
+        } else {
+          // Protected reconciliation: apply local pending stock delta over server stock
+          final localDelta = pendingStockDeductions[doc.id] ?? 0;
+          final projectedStock = product.quantity + localDelta;
+          final localProduct = _localDb.productsBox.get(doc.id);
+
+          final reconciledProduct = product.copyWith(
+            quantity: projectedStock > 0 ? projectedStock : 0,
+            name: localProduct?.name ?? product.name,
+          );
+          await _localDb.productsBox.put(doc.id, reconciledProduct);
+          debugPrint('🛡️ [SYNC RECONCILE] Product ${doc.id} preserved with local stock delta: $localDelta');
+        }
+      }
+
+      if (newestProductTime != null &&
+          (metadata.lastProductSyncAt == null || newestProductTime.isAfter(metadata.lastProductSyncAt!))) {
+        metadata = metadata.copyWith(lastProductSyncAt: newestProductTime);
+        await _localDb.syncMetadataBox.put(checkpointKey, metadata.toMap());
+      }
+
+      // ── 3. Incremental Sync: Categories ──
+      if (_activeShopId != shopId) return;
+      Query<Map<String, dynamic>> categoryQuery = _firestoreInstance
+          .collection(FirestorePaths.categories(shopId));
+
+      if (metadata.lastCategorySyncAt != null) {
+        categoryQuery = categoryQuery.where(
+          'updatedAt',
+          isGreaterThan: Timestamp.fromDate(metadata.lastCategorySyncAt!),
+        ).orderBy('updatedAt');
+      } else {
+        categoryQuery = categoryQuery.limit(100);
+      }
+
+      final categorySnap = await categoryQuery.get();
+      DateTime? newestCategoryTime = metadata.lastCategorySyncAt;
+
+      for (final doc in categorySnap.docs) {
+        if (_activeShopId != shopId) return;
+        final data = doc.data();
+        final catCreatedAt = (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now();
+        final catUpdatedAt = (data['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now();
+        if (newestCategoryTime == null || catUpdatedAt.isAfter(newestCategoryTime)) {
+          newestCategoryTime = catUpdatedAt;
+        }
+
+        if (!pendingCategoryIds.contains(doc.id)) {
+          final category = Category(
+            id: doc.id,
+            name: data['name'] as String? ?? '',
+            description: data['description'] as String?,
+            productCount: (data['productCount'] as num?)?.toInt() ?? 0,
+            createdAt: catCreatedAt,
+            updatedAt: catUpdatedAt,
+          );
+          await _localDb.categoriesBox.put(doc.id, category);
+        }
+      }
+
+      if (newestCategoryTime != null &&
+          (metadata.lastCategorySyncAt == null || newestCategoryTime.isAfter(metadata.lastCategorySyncAt!))) {
+        metadata = metadata.copyWith(lastCategorySyncAt: newestCategoryTime);
+        await _localDb.syncMetadataBox.put(checkpointKey, metadata.toMap());
+      }
+
+      // ── 4. Incremental Sync: Transactions ──
+      if (_activeShopId != shopId) return;
+      Query<Map<String, dynamic>> txQuery = _firestoreInstance
+          .collection(FirestorePaths.transactions(shopId));
+
+      if (metadata.lastTransactionSyncAt != null) {
+        txQuery = txQuery.where(
+          'createdAt',
+          isGreaterThan: Timestamp.fromDate(metadata.lastTransactionSyncAt!),
+        ).orderBy('createdAt');
+      } else {
+        txQuery = txQuery.orderBy('createdAt', descending: true).limit(50);
+      }
+
+      final txSnap = await txQuery.get();
+      DateTime? newestTxTime = metadata.lastTransactionSyncAt;
+
+      for (final doc in txSnap.docs) {
+        if (_activeShopId != shopId) return;
+        final tx = TransactionModel.fromFirestore(doc).toEntity();
+        if (newestTxTime == null || tx.createdAt.isAfter(newestTxTime)) {
+          newestTxTime = tx.createdAt;
+        }
+
+        // Reconcile with local transactions: match by server ID or local ID
+        SaleTransaction? matchedLocalTx;
+        for (final localTx in _localDb.salesTransactionsBox.values) {
+          if (localTx.id == doc.id || localTx.serverTransactionId == doc.id) {
+            matchedLocalTx = localTx;
+            break;
+          }
+        }
+
+        if (matchedLocalTx != null) {
+          await _localDb.salesTransactionsBox.put(
+            matchedLocalTx.id,
+            matchedLocalTx.copyWith(
+              status: 'synced',
+              serverTransactionId: doc.id,
+            ),
+          );
+        } else {
+          await _localDb.salesTransactionsBox.put(doc.id, tx);
+        }
+      }
+
+      if (newestTxTime != null &&
+          (metadata.lastTransactionSyncAt == null || newestTxTime.isAfter(metadata.lastTransactionSyncAt!))) {
+        metadata = metadata.copyWith(lastTransactionSyncAt: newestTxTime);
+        await _localDb.syncMetadataBox.put(checkpointKey, metadata.toMap());
+      }
+
+      // ── 5. Incremental Sync: Stock Movements ──
+      if (_activeShopId != shopId) return;
+      Query<Map<String, dynamic>> movementQuery = _firestoreInstance
+          .collection(FirestorePaths.stockMovements(shopId));
+
+      if (metadata.lastStockMovementSyncAt != null) {
+        movementQuery = movementQuery.where(
+          'createdAt',
+          isGreaterThan: Timestamp.fromDate(metadata.lastStockMovementSyncAt!),
+        ).orderBy('createdAt');
+      } else {
+        movementQuery = movementQuery.orderBy('createdAt', descending: true).limit(100);
+      }
+
+      final movementSnap = await movementQuery.get();
+      DateTime? newestMovementTime = metadata.lastStockMovementSyncAt;
 
       for (final doc in movementSnap.docs) {
+        if (_activeShopId != shopId) return;
         final movement = StockMovementModel.fromFirestore(doc).toEntity();
+        if (newestMovementTime == null || movement.createdAt.isAfter(newestMovementTime)) {
+          newestMovementTime = movement.createdAt;
+        }
         await _localDb.stockMovementsBox.put(doc.id, movement);
       }
 
-      // 4. Fetch remote transactions
-      final txSnap = await _firestoreInstance
-          .collection(FirestorePaths.transactions(shopId))
-          .orderBy('createdAt', descending: true)
-          .limit(50)
-          .get();
-
-      for (final doc in txSnap.docs) {
-        final tx = TransactionModel.fromFirestore(doc).toEntity();
-        await _localDb.salesTransactionsBox.put(doc.id, tx);
+      if (newestMovementTime != null &&
+          (metadata.lastStockMovementSyncAt == null || newestMovementTime.isAfter(metadata.lastStockMovementSyncAt!))) {
+        metadata = metadata.copyWith(lastStockMovementSyncAt: newestMovementTime);
+        await _localDb.syncMetadataBox.put(checkpointKey, metadata.toMap());
       }
+
+      // ── 6. Incremental Sync: Scan History ──
+      if (_activeShopId != shopId) return;
+      Query<Map<String, dynamic>> scanQuery = _firestoreInstance
+          .collection(FirestorePaths.scanHistory(shopId));
+
+      if (metadata.lastScanHistorySyncAt != null) {
+        scanQuery = scanQuery.where(
+          'timestamp',
+          isGreaterThan: Timestamp.fromDate(metadata.lastScanHistorySyncAt!),
+        ).orderBy('timestamp');
+      } else {
+        scanQuery = scanQuery.orderBy('timestamp', descending: true).limit(50);
+      }
+
+      final scanSnap = await scanQuery.get();
+      DateTime? newestScanTime = metadata.lastScanHistorySyncAt;
+
+      for (final doc in scanSnap.docs) {
+        if (_activeShopId != shopId) return;
+        final entry = ScanHistoryEntry.fromFirestore(doc);
+        if (newestScanTime == null || entry.timestamp.isAfter(newestScanTime)) {
+          newestScanTime = entry.timestamp;
+        }
+        await _localDb.scanHistoryBox.put(doc.id, entry);
+      }
+
+      if (newestScanTime != null &&
+          (metadata.lastScanHistorySyncAt == null || newestScanTime.isAfter(metadata.lastScanHistorySyncAt!))) {
+        metadata = metadata.copyWith(lastScanHistorySyncAt: newestScanTime);
+        await _localDb.syncMetadataBox.put(checkpointKey, metadata.toMap());
+      }
+
+      // ── 7. Commit Final Successful Checkpoint ──
+      metadata = metadata.copyWith(lastSuccessfulSyncAt: DateTime.now());
+      await _localDb.syncMetadataBox.put(checkpointKey, metadata.toMap());
+      _metadataController.add(metadata);
+      debugPrint('🏁 [SYNC RECONCILE] Remote -> Local sync completed successfully for shop $shopId');
     } catch (e) {
       debugPrint('⚠️ [SYNC RECONCILE] pullRemoteChanges error: $e');
+    } finally {
+      _isPullingRemote = false;
     }
   }
 
@@ -700,5 +960,6 @@ class SyncProcessor with WidgetsBindingObserver {
     } catch (_) {}
     _connectivitySub?.cancel();
     _stateController.close();
+    _metadataController.close();
   }
 }
