@@ -431,7 +431,8 @@ class ScanHistoryEntryAdapter extends TypeAdapter<ScanHistoryEntry> {
       ..writeByte(5)..write(obj.scanIntent)
       ..writeByte(6)..write(obj.scannedBy)
       ..writeByte(7)..write(obj.scannedByName)
-      ..writeByte(8)..write(obj.timestamp);
+      ..writeByte(8)..write(obj.timestamp)
+      ..writeByte(9)..write(obj.shopId);
   }
 }
 

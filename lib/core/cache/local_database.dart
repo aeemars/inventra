@@ -37,26 +37,40 @@ class LocalDatabase {
     if (_initialized) return;
 
     try {
-      productsBox = await Hive.openBox<Product>('products');
-      categoriesBox = await Hive.openBox<Category>('categories');
+      productsBox = await _openBoxSafely<Product>('products');
+      categoriesBox = await _openBoxSafely<Category>('categories');
       salesTransactionsBox =
-          await Hive.openBox<SaleTransaction>('sales_transactions');
+          await _openBoxSafely<SaleTransaction>('sales_transactions');
       stockMovementsBox =
-          await Hive.openBox<StockMovement>('stock_movements');
+          await _openBoxSafely<StockMovement>('stock_movements');
       scanHistoryBox =
-          await Hive.openBox<ScanHistoryEntry>('scan_history');
-      salesQueueBox = await Hive.openBox<SalesQueueItem>('sales_queue');
-      syncQueueBox = await Hive.openBox<SyncQueueItem>('sync_queue');
-      syncMetadataBox = await Hive.openBox<dynamic>('sync_metadata');
-      appPrefsBox = await Hive.openBox<dynamic>('app_prefs');
+          await _openBoxSafely<ScanHistoryEntry>('scan_history');
+      salesQueueBox = await _openBoxSafely<SalesQueueItem>('sales_queue');
+      syncQueueBox = await _openBoxSafely<SyncQueueItem>('sync_queue');
+      syncMetadataBox = await _openBoxSafely<dynamic>('sync_metadata');
+      appPrefsBox = await _openBoxSafely<dynamic>('app_prefs');
       localOperationsBox =
-          await Hive.openBox<OperationJournalEntry>('local_operations');
+          await _openBoxSafely<OperationJournalEntry>('local_operations');
 
       _initialized = true;
       debugPrint('📦 LocalDatabase initialized with all boxes opened.');
-    } catch (e) {
-      debugPrint('⚠️ LocalDatabase initialization error: $e');
+    } catch (e, stackTrace) {
+      debugPrint('⚠️ LocalDatabase initialization error: $e\n$stackTrace');
       rethrow;
+    }
+  }
+
+  Future<Box<T>> _openBoxSafely<T>(String name) async {
+    try {
+      return await Hive.openBox<T>(name);
+    } catch (e) {
+      debugPrint(
+        '⚠️ Box "$name" corrupted or failed to open ($e). Auto-repairing by resetting corrupted box...',
+      );
+      try {
+        await Hive.deleteBoxFromDisk(name);
+      } catch (_) {}
+      return await Hive.openBox<T>(name);
     }
   }
 
